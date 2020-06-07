@@ -1,0 +1,226 @@
+---
+title: "power analysis - binomial GLMM"
+author: "Christoph Völter"
+date: "31/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+
+load("power_sim_disjunctive_syll.RData")
+```
+
+## Generate data
+
+```{r}
+
+set.seed(1)
+n.subject=16#number subjects
+n.per.subject=18#observations per subject
+n.per.condition=18#observations per subject and condition
+subj.id=as.factor(paste("subj", 1:n.subject, sep="."))
+age_range=c(8:40)
+control.per=1/3
+test.per=0.6
+
+
+
+start.data=data.frame(subj.id)
+#duplicate rows according to the number obs. per subject:
+start.data=start.data[rep(x=1:nrow(start.data),times=n.per.subject), ]
+start.data=as.data.frame(start.data)
+names(start.data)="subj.id"
+
+#add condition and trial number
+start.data=data.frame(expand.grid(subj.id=subj.id, condition=c("control", "test"),  trial=c(1:n.per.condition)))
+
+#add age
+age=sample(x=age_range, size=length(unique(start.data$subj.id)), replace=T)
+start.data$age=as.numeric(age[as.numeric(start.data$subj.id)])
+
+#add sex
+sex=sample(x=c("F", "M"), size=length(unique(start.data$subj.id)), replace=T)
+start.data$sex=as.factor(sex[as.numeric(start.data$subj.id)])
+
+##add order
+#start.data$subj.id.num=as.numeric(substring(start.data$subj.id, 6))
+start.data$order=rep(x=c("test_first","control_first"),times=nrow(start.data)/2)
+
+start.data<-start.data%>%
+  mutate(order2=ifelse(order=="test_first" & condition=="test", "1",ifelse(order=="test_first" & condition=="control", "2",ifelse(order=="control_first" & condition=="control", "1",ifelse(order=="control_first" & condition=="test", "2","")))))
+
+#checks:
+#does each subject have only one sex and age?
+xx=table(start.data$subj.id, start.data$sex)
+range(apply(X=xx>0, MARGIN=1, sum))#should be 1 and 1
+
+xx=table(start.data$subj.id, start.data$age)
+range(apply(X=xx>0, MARGIN=1, sum))#should be 1 and 1
+
+xx=table(start.data$subj.id, start.data$condition)
+range(apply(X=xx>0, MARGIN=1, sum))
+
+xx=table(start.data$subj.id, start.data$trial)
+range(apply(X=xx>0, MARGIN=1, sum))
+
+xx=table(start.data$condition, start.data$order)
+range(apply(X=xx>0, MARGIN=1, sum))
+
+xx=table(start.data$subj.id, start.data$order)
+range(apply(X=xx>0, MARGIN=1, sum))
+```
+
+
+## parameterization of the fixed effects
+```{r}
+pv=c(0,1)
+c0=log(control.per/(1-control.per))#intercept
+c.test=log(test.per/(1-test.per))-log(control.per/(1-control.per))/(max(pv)-0)#slope
+LP=c0+c.test*pv#linear predictor
+rv=exp(LP)/(1+exp(LP))#response variable
+range(rv)
+
+coefs=c("(Intercept)"=log(control.per/(1-control.per)),
+"conditiontest"=log(test.per/(1-test.per))-log(control.per/(1-control.per)))
+```
+parameterising the response
+
+```{r}
+n.simus=100#small number for testing
+r.effects=c(0.2, 0.4, 0.8, 1.6)#random effects to be simulated
+#with the intercept being -0.8473 we could make the following
+#guesses for the random intercept:
+#- 0.2: tiny random intercepts effect
+#- 0.4: moderate random intercepts effect
+#- 0.8: strong random intercepts effect
+#- 1.6: very strong random intercepts effect
+
+#create object to store the simulation parameters and results:
+all.res=data.frame(expand.grid(n.per.subject=n.per.subject, r.effect=r.effects,
+simu=1:n.simus))
+all.res$icpt=NA
+all.res$conditiontest=NA
+all.res$re.sd=NA
+all.res$warns=NA
+
+
+#create data frame with design:
+#done above
+
+#load packages needed:
+library(lme4)
+#Loading required package: Matrix
+library(kyotil)#we want to store info about convergence issues
+#define control structure to make convergence more likely:
+contr=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=10000))
+
+#run simulation
+for(i in 1:nrow(all.res)){ set.seed(i)#allows to later replicate individual simulations
+#replicate rows in start.data according to sample size:
+xdata=start.data[rep(x=1:nrow(start.data), each=all.res[i, "n.per.subject"]), ]
+m.mat=model.matrix(object=~condition, data=xdata)#create model martix
+LP=m.mat[, names(coefs)]%*%coefs#LP wrt fixed effects
+#add random effect to linear predictor:
+LP=LP+rnorm(n=n.subject, sd=all.res[i, "r.effect"])[as.numeric(xdata$subj.id)]
+#generate response:
+xdata$correct=rbinom(n=nrow(xdata), size=1, prob=exp(LP)/(1+exp(LP)))
+#fit model:
+full=keepWarnings(glmer(correct~condition+(1|subj.id),
+data=xdata, family=binomial, control=contr))
+#store results:
+all.res[i, c("icpt", "conditiontest")]=fixef(full$value)
+all.res[i, "re.sd"]=as.data.frame(summary(full$value)$varcor)[1, "sdcor"]
+all.res[i, "warns"]=nchar(paste(full$warnings, collapse=""))
+}
+
+
+
+```
+
+## evaluation of results wrt warnings
+
+* number of warning per combinations of random effects
+```{r}
+
+tapply(X=all.res[, "warns"]>0, INDEX=all.res[, c("n.per.subject", "r.effect")],
+FUN=sum)
+```
+
+* plotting the estimates
+
+```{r}
+par(mar=c(3, 3, 0.2, 0.2), mgp=c(1.7, 0.3, 0), tcl=-0.15, las=1)
+plot(x=as.numeric(as.factor(rep(x=c("icpt", "conditiontest", "re.sd"),
+each=nrow(all.res)))),
+y=unlist(all.res[, c("icpt", "conditiontest", "re.sd")]),
+pch=19, col=grey(level=0.2, alpha=0.2),
+xaxt="n", xlim=c(0.5, 3.5), ylab="estimate", xlab="")
+mtext(text=c("icpt", "conditiontest", "re.sd"), side=1, at=1:3, line=0.2)
+```
+
+models that converged without warnings:
+```{r}
+all.res2=subset(all.res, warns==0)
+#not needed because there were no models with warnings
+
+table(round(all.res2$conditiontest))
+```
+A: intercept
+```{r}
+#some preparation for plotting:
+par(mar=c(3, 3, 0.2, 0.2), mgp=c(1.7, 0.3, 0), tcl=-0.15, las=1)
+where=as.numeric(as.factor(paste(all.res2$r.effect, all.res2$n.per.subject,
+sep="_")))
+
+plot(x=where, y=all.res2$icpt, xlab="", xaxt="n", pch=19,
+col=grey(level=0.5, alpha=0.5), cex=1.5)
+abline(h=coefs["(Intercept)"])
+mtext(text=rep(x=n.per.subject, times=length(r.effects)), side=1, line=0.2,
+at=1:(length(r.effects)*length(n.per.subject)), cex=1.5)
+mtext(text="N:", side=1, line=0.2, at=0, cex=1.5)
+mtext(text=rep(x=r.effects, each=length(n.per.subject)), side=1, line=1.4,
+at=1:(length(r.effects)*length(n.per.subject)), cex=1.5)
+mtext(text="re:", side=1, line=1.4, at=0, cex=1.5)
+abline(v=(1:length(r.effects))[-length(r.effects)]*length(n.per.subject)+0.5,
+lty=2)
+```
+B: fixed effect of teaching
+```{r}
+
+plot(x=where, y=all.res2$conditiontest, xlab="", xaxt="n", pch=19,
+col=grey(level=0.5, alpha=0.5), cex=1.5)
+abline(h=coefs["conditiontest"])
+mtext(text=rep(x=n.per.subject, times=length(r.effects)), side=1, line=0.2,
+at=1:(length(r.effects)*length(n.per.subject)), cex=1.5)
+mtext(text="N:", side=1, line=0.2, at=0, cex=1.5)
+mtext(text=rep(x=r.effects, each=length(n.per.subject)), side=1, line=1.4,
+at=1:(length(r.effects)*length(n.per.subject)), cex=1.5)
+mtext(text="re:", side=1, line=1.4, at=0, cex=1.5)
+abline(v=(1:length(r.effects))[-length(r.effects)]*length(n.per.subject)+0.5,
+lty=2)
+```
+## C: random intercept
+```{r}
+plot(x=where, y=all.res2$re.sd, xlab="", xaxt="n", pch=19,
+col=grey(level=0.5, alpha=0.5), cex=1.5)
+hll=1.75
+where2=((1:length(r.effects))-1)*length(n.per.subject)+2.5
+segments(x0=where2-hll, x1=where2+hll, y0=r.effects, y1=r.effects)
+mtext(text=rep(x=n.per.subject, times=length(r.effects)), side=1, line=0.2,
+at=1:(length(r.effects)*length(n.per.subject)), cex=1.5)
+mtext(text="N:", side=1, line=0.2, at=0, cex=1.5)
+mtext(text=rep(x=r.effects, each=length(n.per.subject)), side=1, line=1.4,
+at=1:(length(r.effects)*length(n.per.subject)), cex=1.5)
+mtext(text="re:", side=1, line=1.4, at=0, cex=1.5)
+abline(v=(1:length(r.effects))[-length(r.effects)]*length(n.per.subject)+0.5,
+lty=2)
+```
+
+```{r}
+save.image("power_sim_disjunctive_syll.RData")
+```
+
+
+
