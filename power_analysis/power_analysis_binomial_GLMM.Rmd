@@ -327,13 +327,15 @@ lrt.data2
 
 ```{r echo=FALSE}
 
-ggplot(data = lrt.data2, aes(y=proportion.sign.lrt2))+
-  geom_point(aes(x=as.factor(r.effect), y=proportion.sign.lrt2))+
-  geom_boxplot(aes(x=as.factor(r.effect), y=proportion.sign.lrt2, group=r.effect))+
-  #theme_classic()+
-  ylim(0.3, 1)+
-  geom_hline(yintercept=0.8, colour="red", lty=2)+
-  facet_wrap(~r.slope.con)
+p <- ggplot(data = lrt.data2, aes(y=proportion.sign.lrt2))+
+      geom_point(aes(x=as.factor(r.effect), y=proportion.sign.lrt2))+
+      geom_boxplot(aes(x=as.factor(r.effect), y=proportion.sign.lrt2, group=r.effect))+
+      #theme_classic()+
+      ylim(0.3, 1)+
+      geom_hline(yintercept=0.8, colour="red", lty=2)+
+      facet_wrap(~r.slope.con)
+ p
+ggsave("simulation_results.png")
 
 ```
 
