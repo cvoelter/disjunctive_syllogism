@@ -14,7 +14,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 
-load("power_sim_disjsyll_order_as_factor_1000iter.RData")
+load("power_sim_disjsyll_order_as_factor_1000iter_12tr.RData")
 ```
 
 ## Generate data
@@ -23,8 +23,8 @@ load("power_sim_disjsyll_order_as_factor_1000iter.RData")
 
 set.seed(1)
 n.subject <- 16 # number subjects
-n.per.subject <- 18 # observations per subject
-n.per.condition <- 18 # observations per subject and condition
+n.per.subject <- 12 # observations per subject
+n.per.condition <- 12 # observations per subject and condition
 subj.id <- as.factor(paste("subj", 1:n.subject, sep = "."))
 age_range <- c(12:31) # age range between 8 and 40
 control.per <- 1 / 3 # performance in control condition
@@ -134,7 +134,7 @@ r.slope.trial <- 0.1
 # create object to store the simulation parameters and results:
 all.res <- data.frame(expand.grid(
   n.per.subject = n.per.subject, r.effect = r.effects, 
-  r.slope.con = r.slope.con, r.slope.trial = r.slope.trial, r.slope.order = r.slope.order,
+  r.slope.con = r.slope.con, r.slope.trial = r.slope.trial, #r.slope.order = r.slope.order,
   simu = 1:n.simus
 ))
 all.res$icpt <- NA
@@ -165,7 +165,7 @@ coefs <- c(
   "(Intercept)" = log(control.per / (1 - control.per)),
   "conditiontest" = log(test.per / (1 - test.per)) - log(control.per / (1 - control.per)),
   "z.age" = 0,
-  "sexM" = 0,
+  "sexMale" = 0,
   "z.trial" = 0,
   "ordertest_first" = 0
 )
@@ -206,7 +206,7 @@ for (i in 1:nrow(all.res)) {
   ))
 
   # store results:
-  all.res[i, c("icpt", "conditiontest", "z.age", "sexM", "z.trial", "ordertest_first")] <- fixef(full$value)
+  all.res[i, c("icpt", "conditiontest", "z.age", "sexMale", "z.trial", "ordertest_first")] <- fixef(full$value)
   all.res[i, "re.sd"] <- as.data.frame(summary(full$value)$varcor)[1, "sdcor"]
   all.res[i, "warns.full"] <- nchar(paste(full$warnings, collapse = ""))
   all.res[i, "warns.null"] <- nchar(paste(null$warnings, collapse = ""))
@@ -215,7 +215,7 @@ for (i in 1:nrow(all.res)) {
 }
 
 
-#save.image("power_sim_disjsyll_order_as_factor_1000iter.RData")
+#save.image("power_sim_disjsyll_order_as_factor_1000iter_12tr.RData")
 ```
 
 ## Evaluation of results 
