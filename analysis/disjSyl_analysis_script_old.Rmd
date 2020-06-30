@@ -1,0 +1,36 @@
+---
+title: " binomial GLMM"
+author: ""
+date: "31/05/2020"
+output: 
+  html_document:
+    theme: united
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lme4)
+read.csv("data/dummy_data.csv")
+```
+
+
+
+```{r echo=FALSE}
+
+  # fit full model:
+  full <- glmer(correct ~ condition + z.age + sex + z.trial + order + (1 + condition.c + z.trial || subj.id),
+    data = xdata, family = binomial, control = contr
+  )
+  # fit null model:
+  null <- glmer(correct ~ z.trial + order + (1 + condition.c + z.trial || subj.id),
+    data = xdata, family = binomial, control = contr
+  )
+  
+anova(null, full, test = "Chisq")
+drop1(full, test = "Chisq")
+```
+

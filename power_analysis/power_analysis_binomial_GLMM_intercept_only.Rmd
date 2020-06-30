@@ -13,8 +13,9 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(cowplot)
 
-#load("power_sim_disjsyll_order_as_factor_1000iter_12tr.RData")
+load("power_sim_disjsyll_order_as_factor_1000iter_intercept_only.RData")
 ```
 
 ## Generate data
@@ -27,7 +28,7 @@ n.per.subject <- 12 # observations per subject
 n.per.condition <- 12 # observations per subject and condition
 subj.id <- as.factor(paste("subj", 1:n.subject, sep = "."))
 control.per <- 1 / 3 # performance in control condition
-test.per <- 0.65 # performance in test condition
+test.per <- c(0.55, 0.65) # performance in test condition
 
 start.data <- data.frame(subj.id)
 # duplicate rows according to the number obs. per subject:
@@ -95,7 +96,7 @@ n.simus <- 1000 # small number for testing
 r.effects <- c(0.175, 0.35, 0.7) # random effects to be simulated
 # with the intercept being -0.6931472 (qlogis(1/3)) we could make the following
 # guesses for the random intercept:
-#- 0.175: tiny random intercepts effect
+#- 0.175: tiny  random intercepts effect
 #- 0.35: moderate random intercepts effect
 #- 0.7: strong random intercepts effect
 #- 1.4: very strong random intercepts effect
@@ -104,8 +105,9 @@ r.slope.trial <- 0.1
 
 # create object to store the simulation parameters and results:
 all.res <- data.frame(expand.grid(
-  n.per.subject = n.per.subject, r.effect = r.effects, 
+  n.per.subject = n.per.subject, r.effect = r.effects,
   r.slope.trial = r.slope.trial,
+  test.per = test.per,
   simu = 1:n.simus
 ))
 all.res$icpt <- NA
@@ -127,12 +129,7 @@ library(kyotil) # we want to store info about convergence issues
 contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000))
 
 xdata <- start.data %>%
-  filter(condition=="test")
-
-coefs <- c(
-  "(Intercept)" = log(test.per / (1 - test.per)),
-  "z.trial" = 0
-)
+  filter(condition == "test")
 
 m.mat <- model.matrix(object = ~z.trial, data = xdata) # create model martix
 
@@ -140,12 +137,17 @@ m.mat <- model.matrix(object = ~z.trial, data = xdata) # create model martix
 for (i in 1:nrow(all.res)) {
   set.seed(i) # allows to later replicate individual simulations
 
+  coefs <- c(
+    "(Intercept)" = log(all.res[i, "test.per"] / (1 - all.res[i, "test.per"])),
+    "z.trial" = 0
+  )
+
   LP <- m.mat[, names(coefs)] %*% coefs # LP wrt fixed effects
 
   # add random effect to linear predictor:
   LP <- LP + rnorm(n = n.subject, sd = all.res[i, "r.effect"])[as.numeric(xdata$subj.id)] +
-        rnorm(n = n.subject, sd = all.res[i, "r.slope.trial"])[as.numeric(xdata$subj.id)] * xdata$z.trial 
-  
+    rnorm(n = n.subject, sd = all.res[i, "r.slope.trial"])[as.numeric(xdata$subj.id)] * xdata$z.trial
+
   # generate response:
   xdata$correct <- rbinom(n = nrow(xdata), size = 1, prob = exp(LP) / (1 + exp(LP)))
 
@@ -159,10 +161,10 @@ for (i in 1:nrow(all.res)) {
   all.res[i, "icpt.p"] <- summary(full$value)$coefficients["(Intercept)", "Pr(>|z|)"]
   all.res[i, "re.sd"] <- as.data.frame(summary(full$value)$varcor)[1, "sdcor"]
   all.res[i, "warns.full"] <- nchar(paste(full$warnings, collapse = ""))
- }
+}
 
 
-save.image("power_sim_disjsyll_order_as_factor_1000iter_intercept_only.RData")
+#save.image("power_sim_disjsyll_order_as_factor_1000iter_intercept_only.RData")
 ```
 
 
@@ -192,7 +194,7 @@ all.res2=subset(all.res, warns.full==0)
 ```{r echo=FALSE}
 
 icpt.p.data <- all.res2 %>%
-  group_by(r.effect) %>%
+  group_by(test.per, r.effect) %>%
   summarise(mean.icpt.p = mean(icpt.p), 
             n.sign.icpt.p = length(icpt.p[icpt.p < 0.05]), 
             n.icpt.p = n.simus,#length(lrt.p.con), 
@@ -205,24 +207,37 @@ icpt.p.data
 
 ```{r echo=FALSE}
 
-p <- ggplot(data = icpt.p.data, aes(y=proportion.sign.icpt.p))+
-      geom_point(aes(x=as.factor(r.effect), y=proportion.sign.icpt.p))+
-      geom_boxplot(aes(x=as.factor(r.effect), y=proportion.sign.icpt.p, group=r.effect))+
-      #theme_classic()+
-      ylim(0.3, 1)+
-      geom_hline(yintercept=0.8, colour="red", lty=2)
- p
-ggsave("intercept_only_simu.png")
+p.icpt.prop <- ggplot(data = icpt.p.data, aes(y = proportion.sign.icpt.p)) +
+  geom_point(aes(x = as.factor(r.effect), y = proportion.sign.icpt.p)) +
+  geom_boxplot(aes(x = as.factor(r.effect), y = proportion.sign.icpt.p, group = r.effect)) +
+  ylim(0.0, 1) +
+  geom_hline(yintercept = 0.8, colour = "blue", lwd = 1.05, lty = 3) +
+  facet_wrap(~test.per) +
+  ylab("Power") +
+  xlab("Size of random intercept") +
+  theme_bw()
+p.icpt.prop
 
 ```
 
 #### Plotting the intercepts
 
 ```{r echo=FALSE}
-ggplot(data = all.res2, aes(x=as.factor(r.effect), y=icpt))+
-  geom_jitter( alpha=0.5, col="grey")+
-  geom_boxplot(aes(x=as.factor(r.effect), y=icpt, group=r.effect), alpha=0.1, outlier.colour="white")+
-  geom_hline(yintercept=coefs["(Intercept)"], colour="red", lty=2)
+
+p.icpt.est <- ggplot(data = all.res2, aes(x = as.factor(r.effect), y = icpt)) +
+  geom_jitter(alpha = 0.2, col = "grey") +
+  geom_boxplot(aes(x = as.factor(r.effect), y = icpt, group = r.effect), alpha = 0.1, outlier.colour = "white") +
+  facet_wrap(~test.per) +
+  geom_hline(yintercept = 0, colour = "black", alpha = 0.5) +
+  geom_hline(data = data.frame(test.per = "0.65"), aes(yintercept = coefs["(Intercept)"]), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
+  geom_hline(data = data.frame(test.per = "0.55"), aes(yintercept = qlogis(0.55)), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
+  ylab("Intercept") +
+  xlab("Size of random intercept") +
+  theme_bw()
+
+p.int <- plot_grid(p.icpt.prop, p.icpt.est, labels = c("a", "b"))
+
+ggsave(p.int, filename = "intercept_only_model.png", scale = 0.45, height = 7, width = 16)
 ```
 
 
@@ -232,10 +247,8 @@ ggplot(data = all.res2, aes(x=as.factor(r.effect), y=icpt))+
 ```{r echo=FALSE}
 ggplot(data = all.res2, aes(x=as.factor(r.effect), y=re.sd))+
   geom_jitter( alpha=0.5, col="grey")+
-  geom_boxplot(aes(x=as.factor(r.effect), y=re.sd, group=r.effect), alpha=0.1, outlier.colour="white")
-  #theme_classic()+
-  #scale_y_continuous(trans='log10')+
-  #geom_hline(yintercept=0.05, colour="red", lty=2)+
+  geom_boxplot(aes(x=as.factor(r.effect), y=re.sd, group=r.effect), alpha=0.1, outlier.colour="white")+
+  facet_wrap(~test.per)
 
 ```
 
