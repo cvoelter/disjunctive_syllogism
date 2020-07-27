@@ -208,10 +208,10 @@ icpt.p.data
 ```{r echo=FALSE}
 
 p.icpt.prop <- ggplot(data = icpt.p.data, aes(y = proportion.sign.icpt.p)) +
-  geom_point(aes(x = as.factor(r.effect), y = proportion.sign.icpt.p)) +
+ # geom_point(aes(x = as.factor(r.effect), y = proportion.sign.icpt.p)) +
   geom_boxplot(aes(x = as.factor(r.effect), y = proportion.sign.icpt.p, group = r.effect)) +
   ylim(0.0, 1) +
-  geom_hline(yintercept = 0.8, colour = "blue", lwd = 1.05, lty = 3) +
+  geom_hline(yintercept = 0.8, colour = "black", lwd = 1.05, lty = 3) +
   facet_wrap(~test.per) +
   ylab("Power") +
   xlab("Size of random intercept") +
