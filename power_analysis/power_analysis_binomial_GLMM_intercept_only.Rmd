@@ -1,5 +1,5 @@
 ---
-title: "power analysis - binomial GLMM - intercept-only"
+title: "Intercept-only models - power analysis"
 author: "Christoph Völter"
 date: "31/05/2020"
 output: 
@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(cowplot)
 
-load("power_sim_disjsyll_order_as_factor_1000iter_intercept_only.RData")
+load("power_sim_disjsyll_1000iter_intercept_only.RData")
 ```
 
 ## Generate data
@@ -164,7 +164,7 @@ for (i in 1:nrow(all.res)) {
 }
 
 
-#save.image("power_sim_disjsyll_order_as_factor_1000iter_intercept_only.RData")
+#save.image("power_sim_disjsyll_1000iter_intercept_only.RData")
 ```
 
 
@@ -190,7 +190,7 @@ FUN=sum)
 all.res2=subset(all.res, warns.full==0)
 ```
 
-### How many models converged, and a significant intercept?  
+### How many models converged and have a significant intercept?  
 ```{r echo=FALSE}
 
 icpt.p.data <- all.res2 %>%

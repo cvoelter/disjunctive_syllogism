@@ -1,5 +1,5 @@
 ---
-title: "power analysis - binomial GLMM"
+title: "Exp 3 power analysis - binomial GLMM"
 author: "Christoph Völter"
 date: "31/05/2020"
 output: 
@@ -13,8 +13,10 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(cowplot)
+library("gghalves")
 
-load("power_sim_disjsyll_order_as_factor_1000iter.RData")
+load("power_sim_disjsyll_1000iter_Exp3.RData")
 ```
 
 ## Generate data
@@ -23,12 +25,12 @@ load("power_sim_disjsyll_order_as_factor_1000iter.RData")
 
 set.seed(1)
 n.subject <- 16 # number subjects
-n.per.subject <- 18 # observations per subject
-n.per.condition <- 18 # observations per subject and condition
+n.per.subject <- 12 # observations per subject
+n.per.condition <- 12 # observations per subject and condition
 subj.id <- as.factor(paste("subj", 1:n.subject, sep = "."))
 age_range <- c(12:31) # age range between 8 and 40
-control.per <- 1/3 # performance in control condition
-test.per <- 0.55 # performance in test condition
+control.per <- 1 / 3 # performance in control condition
+test.per <- c(0.55, 0.65) # performance in test condition
 
 start.data <- data.frame(subj.id)
 # duplicate rows according to the number obs. per subject:
@@ -39,41 +41,32 @@ names(start.data) <- "subj.id"
 # add condition and trial number
 start.data <- data.frame(expand.grid(subj.id = subj.id, condition = c("control", "test"), trial = c(1:n.per.condition)))
 
-# add age
-age <- sample(x = age_range, size = length(unique(start.data$subj.id)), replace = T)
-start.data$age <- as.numeric(age[as.numeric(start.data$subj.id)])
+# add order
+start.data$order <- as.factor(rep(x = c("test_first", "control_first"), times = n.subject / 2))[as.numeric(start.data$subj.id)]
 
-# add sex
-sex <- sample(x = c("F", "M"), size = length(unique(start.data$subj.id)), replace = T)
-start.data$sex <- as.factor(sex[as.numeric(start.data$subj.id)])
+start.data$order2 <- ifelse((start.data$order == "test_first" & start.data$condition == "test") |
+  (start.data$order == "control_first" & start.data$condition == "control"), 1, 2)
 
-## add order
-start.data$order <- as.factor(rep(x = c("test_first", "control_first"), times = nrow(start.data) / 2))
-##roger: this last line is a little 'dangerous' as it relies on the fact that start.data comprises individuals in the form
-	##1, 2, 3... and this repeated multiple times
-	##a safer way is:
-	as.factor(rep(x = c("test_first", "control_first"), times = n.subject / 2))[as.numeric(start.data$subj.id)]
-	
-	
-start.data <- start.data %>%
-  mutate(order2 = as.numeric(ifelse(order == "test_first" & condition == "test", "1", ifelse(order == "test_first" & condition == "control", "2", ifelse(order == "control_first" & condition == "control", "1", ifelse(order == "control_first" & condition == "test", "2", ""))))))
-##roger: this last line seems unnecessarily complicated to me
-	##you could also use
-  start.data$order2=ifelse((start.data$order == "test_first" & start.data$condition == "test") |
-		(start.data$order == "control_first" & start.data$condition == "control"), 1, 2)
 
-#z-transformation of covariates
-start.data$z.age=as.vector(scale(start.data$age))
-start.data$z.trial=as.vector(scale(start.data$trial))
-start.data$z.order=as.vector(scale(as.numeric(start.data$order2)))
+# add demographics  (if it should be generated in each loop)
+chimp.demo <- read.csv("data/chimp_demographics.csv")
+start.data$subject_name <- as.factor(rep(x = chimp.demo$Subject, times = n.per.subject))[as.numeric(start.data$subj.id)]
+start.data$age <- as.numeric(rep(x = chimp.demo$Age, times = n.per.subject))[as.numeric(start.data$subj.id)]
+start.data$sex <- as.factor(rep(x = chimp.demo$Sex, times = n.per.subject))[as.numeric(start.data$subj.id)]
 
-#dummy code factors
-start.data$condition.dummy=as.numeric(start.data$condition==levels(start.data$condition)[2])
-start.data$order.dummy=as.numeric(start.data$order==levels(start.data$order)[2])
 
-#center condition for random slopes:
-start.data$condition.c=as.numeric(start.data$condition)-mean(as.numeric(start.data$condition))
-start.data$order.c=as.numeric(start.data$order)-mean(as.numeric(start.data$order))
+# z-transformation of covariates
+start.data$z.age <- as.vector(scale(start.data$age))
+start.data$z.trial <- as.vector(scale(start.data$trial))
+start.data$z.order <- as.vector(scale(as.numeric(start.data$order2)))
+
+# dummy code factors
+start.data$condition.dummy <- as.numeric(start.data$condition == levels(start.data$condition)[2])
+start.data$order.dummy <- as.numeric(start.data$order == levels(start.data$order)[2])
+
+# center condition for random slopes:
+start.data$condition.c <- as.numeric(start.data$condition) - mean(as.numeric(start.data$condition))
+start.data$order.c <- as.numeric(start.data$order) - mean(as.numeric(start.data$order))
 
 # checks:
 # does each subject have only one sex and age?
@@ -95,26 +88,6 @@ range(apply(X = xx > 0, MARGIN = 1, sum))
 xx <- table(start.data$subj.id, start.data$order)
 range(apply(X = xx > 0, MARGIN = 1, sum))
 ```
-
-
-
-```{r include=FALSE}
-#not relevant for the simulation, chunk can be removed.
-## parameterization of the fixed effects
-pv <- c(0, 1)
-c0 <- log(control.per / (1 - control.per)) # intercept
-c.test <- log(test.per / (1 - test.per)) - log(control.per / (1 - control.per)) / (max(pv) - min(pv)) # slope
-#c.test <- (qlogis(test.per) - qlogis(control.per)) / (max(pv) - min(pv)) # slope using qlogis
-
-LP <- c0 + c.test * pv # linear predictor
-rv <- exp(LP) / (1 + exp(LP)) # response variable
-range(rv)
-
-par(mar=c(3, 3, 0.2, 0.2), mgp=c(1.7, 0.3, 0), tcl=-0.2, las=1)
-plot(x=as.factor(pv), y=rv, type="hist", ylim=c(0, 1),
-xlab="condition", ylab="correct choice")
-```
-
 
 
 ## Simulation
@@ -143,7 +116,8 @@ r.slope.trial <- 0.1
 # create object to store the simulation parameters and results:
 all.res <- data.frame(expand.grid(
   n.per.subject = n.per.subject, r.effect = r.effects, 
-  r.slope.con = r.slope.con, r.slope.trial = r.slope.trial, r.slope.order = r.slope.order,
+  r.slope.con = r.slope.con, r.slope.trial = r.slope.trial, #r.slope.order = r.slope.order,
+  test.per = test.per,
   simu = 1:n.simus
 ))
 all.res$icpt <- NA
@@ -170,14 +144,7 @@ contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000))
 
 xdata <- start.data
 
-coefs <- c(
-  "(Intercept)" = log(control.per / (1 - control.per)),
-  "conditiontest" = log(test.per / (1 - test.per)) - log(control.per / (1 - control.per)),
-  "z.age" = 0,
-  "sexM" = 0,
-  "z.trial" = 0,
-  "ordertest_first" = 0
-)
+
 
 m.mat <- model.matrix(object = ~condition + z.age + sex + z.trial + order, data = xdata) # create model martix
 
@@ -187,13 +154,29 @@ for (i in 1:nrow(all.res)) {
 
   # xdata <- start.data[rep(x = 1:nrow(start.data), each = all.res[i, "n.per.subject"]), ]  # replicate rows in start.data according to sample size
 
-  LP <- m.mat[, names(coefs)] %*% coefs # LP wrt fixed effects
+  # add age  (if it should be generated in each loop)
+  # age <- sample(x = age_range, size = length(unique(start.data$subj.id)), replace = T)
+  # start.data$age <- as.numeric(age[as.numeric(start.data$subj.id)])
+  # add sex (if it should be generated in each loop)
+  # sex <- sample(x = c("F", "M"), size = length(unique(start.data$subj.id)), replace = T)
+  # start.data$sex <- as.factor(sex[as.numeric(start.data$subj.id)])
   
+  coefs <- c(
+  "(Intercept)" = log(control.per / (1 - control.per)),
+  "conditiontest" = log(all.res[i, "test.per"] / (1 - all.res[i, "test.per"] )) - log(control.per / (1 - control.per)),
+  "z.age" = 0,
+  "sexMale" = 0,
+  "z.trial" = 0,
+  "ordertest_first" = 0
+)
+  
+  LP <- m.mat[, names(coefs)] %*% coefs # LP wrt fixed effects
+
   # add random effect to linear predictor:
-  LP <- LP + rnorm(n = n.subject, sd = all.res[i, "r.effect"])[as.numeric(xdata$subj.id)] + 
-    rnorm(n = n.subject, sd = all.res[i, "r.slope.con"])[as.numeric(xdata$subj.id)]*xdata$condition.dummy +
-    rnorm(n = n.subject, sd = all.res[i, "r.slope.trial"])[as.numeric(xdata$subj.id)]*xdata$z.trial #+
-    #rnorm(n = n.subject, sd = all.res[i, "r.slope.order"])[as.numeric(xdata$subj.id)]*xdata$z.order 
+  LP <- LP + rnorm(n = n.subject, sd = all.res[i, "r.effect"])[as.numeric(xdata$subj.id)] +
+    rnorm(n = n.subject, sd = all.res[i, "r.slope.con"])[as.numeric(xdata$subj.id)] * xdata$condition.dummy +
+    rnorm(n = n.subject, sd = all.res[i, "r.slope.trial"])[as.numeric(xdata$subj.id)] * xdata$z.trial #+
+  # rnorm(n = n.subject, sd = all.res[i, "r.slope.order"])[as.numeric(xdata$subj.id)]*xdata$z.order
 
   # generate response:
   xdata$correct <- rbinom(n = nrow(xdata), size = 1, prob = exp(LP) / (1 + exp(LP)))
@@ -203,21 +186,21 @@ for (i in 1:nrow(all.res)) {
     data = xdata, family = binomial, control = contr
   ))
   # fit null model:
-    null <- keepWarnings(glmer(correct ~ z.trial + order + (1 + condition.c + z.trial || subj.id),
+  null <- keepWarnings(glmer(correct ~ z.trial + order + (1 + condition.c + z.trial || subj.id),
     data = xdata, family = binomial, control = contr
   ))
-    
+
   # store results:
-  all.res[i, c("icpt", "conditiontest", "z.age", "sexM", "z.trial", "ordertest_first")] <- fixef(full$value)
+  all.res[i, c("icpt", "conditiontest", "z.age", "sexMale", "z.trial", "ordertest_first")] <- fixef(full$value)
   all.res[i, "re.sd"] <- as.data.frame(summary(full$value)$varcor)[1, "sdcor"]
   all.res[i, "warns.full"] <- nchar(paste(full$warnings, collapse = ""))
   all.res[i, "warns.null"] <- nchar(paste(null$warnings, collapse = ""))
-  all.res[i, "lrt.p.con"] <- as.data.frame(drop1(full$value, test="Chisq"))["condition", "Pr(Chi)"]
-  all.res[i, "full.null.p"] <- as.data.frame(anova(null$value, full$value, test="Chisq"))[2, "Pr(>Chisq)"]
+  all.res[i, "lrt.p.con"] <- as.data.frame(drop1(full$value, test = "Chisq"))["condition", "Pr(Chi)"]
+  all.res[i, "full.null.p"] <- as.data.frame(anova(null$value, full$value, test = "Chisq"))[2, "Pr(>Chisq)"]
 }
 
 
-#save.image("power_sim_disjsyll_order_as_factor_1000iter.RData")
+#save.image("power_sim_disjsyll_1000iter_Exp3.RData")
 ```
 
 ## Evaluation of results 
@@ -268,7 +251,7 @@ table(round(all.res2$conditiontest))
 ### How many models converged and have a significant LRT of condition or a significant full-null model comparison?   
 ```{r echo=FALSE}
 lrt.data <- all.res2 %>%
-  group_by(r.effect, r.slope.con) %>%
+  group_by(test.per, r.effect, r.slope.con) %>%
   summarise(lrt.p.con.mean = mean(lrt.p.con), #mean condition p-value of the models that converged
             n.sign.lrt = length(lrt.p.con[lrt.p.con < 0.05]), #number of significant condition effects
             n.lrt = n.simus,#length(lrt.p.con), #number of iterations
@@ -316,7 +299,7 @@ ggplot(data = lrt.data, aes(y=proportion.sign.lrt))+
 
 lrt.data2 <- all.res2 %>%
   filter(full.null.p<0.05)%>%
-  group_by(r.effect, r.slope.con) %>%
+  group_by(test.per, r.effect, r.slope.con) %>%
   summarise(lrt.p.con.mean2 = mean(lrt.p.con), 
             n.sign.lrt2 = length(lrt.p.con[lrt.p.con < 0.05]), 
             n.lrt = n.simus,#length(lrt.p.con), 
@@ -329,14 +312,18 @@ lrt.data2
 
 ```{r echo=FALSE}
 
-ggplot(data = lrt.data2, aes(y=proportion.sign.lrt2))+
-  geom_point(aes(x=as.factor(r.effect), y=proportion.sign.lrt2))+
-  geom_boxplot(aes(x=as.factor(r.effect), y=proportion.sign.lrt2, group=r.effect))+
-  #theme_classic()+
-  ylim(0.3, 1)+
-  geom_hline(yintercept=0.8, colour="red", lty=2)+
-  facet_wrap(~r.slope.con)
+p.con.power <- ggplot(data = lrt.data2, aes(y=proportion.sign.lrt2))+
+        geom_boxplot(data = lrt.data2 %>% filter(r.slope.con == "0.45"), aes(x=as.factor(r.effect), y=proportion.sign.lrt2, group=as.factor(r.effect)), position = position_nudge(x = -.15), col = "darkorange", width=0.3)+
+          geom_boxplot(data = lrt.data2 %>% filter(r.slope.con == "0.9"), aes(x=as.factor(r.effect), y=proportion.sign.lrt2, group=as.factor(r.effect)), position = position_nudge(x = .15), col = "dodgerblue", width=0.3)+
+      ylim(0.0, 1)+
+  geom_hline(yintercept = 0.8, colour = "black", lwd = 1.05, lty = 3) +
+      facet_wrap(~test.per)+
+      ylab("Power") +
+      xlab("Size of random effect") +
+      theme_bw()
+ p.con.power
 
+#ggsave(p, filename = "GLMM_w_condition_power.png", scale = 0.5, height = 8, width = 12)
 ```
 
 #### Plotting the intercepts
@@ -358,6 +345,7 @@ mtext(text="re:", side=1, line=1.4, at=0.5, cex=1)
 abline(v=(1:length(r.effects))[-length(r.effects)]*length(r.slope.con)+0.5,
 lty=2)
 ```
+
 ```{r echo=FALSE}
 ggplot(data = all.res2, aes(x=as.factor(r.effect), y=icpt))+
   geom_jitter( alpha=0.5, col="grey")+
@@ -385,11 +373,31 @@ lty=2)
 ```
 
 ```{r echo=FALSE}
-ggplot(data = all.res2, aes(x=as.factor(r.effect), y=conditiontest))+
-  geom_jitter( alpha=0.5, col="grey")+
-  geom_boxplot(aes(x=as.factor(r.effect), y=conditiontest, group=r.effect), alpha=0.1, outlier.colour="white")+
-  geom_hline(yintercept=coefs["conditiontest"], colour="red", lty=2)+
-  facet_wrap(~r.slope.con)
+p.con.est <- ggplot(data = all.res2, aes(x = as.factor(r.effect), y = conditiontest)) +
+  geom_jitter(data = all.res2, aes(x = as.factor(r.effect), y = conditiontest, color = as.factor(r.slope.con)), size = 1.5, position = position_jitterdodge(dodge.width = 0.8, jitter.width = 0.5), alpha = .1) +
+  scale_color_manual(values = c("darkorange", "dodgerblue"), name = "Random slopes") +
+  geom_boxplot(data = all.res2 %>% filter(r.slope.con == "0.45"), aes(x = as.factor(r.effect), y = conditiontest, group = as.factor(r.effect)), position = position_nudge(x = -.2), width = 0.3, alpha = 0.1, outlier.colour = "white") +
+  geom_boxplot(data = all.res2 %>% filter(r.slope.con == "0.9"), aes(x = as.factor(r.effect), y = conditiontest, group = as.factor(r.effect)), position = position_nudge(x = .2), width = 0.3, alpha = 0.1, outlier.colour = "white") +
+  facet_wrap(~test.per) +
+  geom_hline(yintercept = 0, colour = "black", alpha = 0.5) +
+  geom_hline(data = data.frame(test.per = "0.65"), aes(yintercept = coefs["conditiontest"]), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
+  geom_hline(data = data.frame(test.per = "0.55"), aes(yintercept = qlogis(0.55) - qlogis(1 / 3)), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
+  ylab("Condition fixed effect") +
+  xlab("Size of random intercept") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+p.legend <- ggplot(data = all.res2 %>% mutate(r.slope.con = fct_recode(as.factor(r.slope.con), "medium" = "0.45", "large" = "0.9")), aes(x = as.factor(r.effect), y = conditiontest)) +
+  geom_point(aes(colour = as.factor(r.slope.con))) +
+  scale_color_manual(values = c("darkorange", "dodgerblue"), name = "Random slope") +
+  theme_classic() +
+  theme(legend.direction = "horizontal", legend.box.background = element_rect(colour = "black"))
+
+p.leg <- get_legend(p.legend)
+
+p.con <- plot_grid(p.con.power, p.con.est, labels = c("a", "b"), rel_widths = c(1, 1))
+p.con2 <- ggdraw(plot_grid(p.con, p.leg, ncol = 1, nrow = 2, rel_heights = c(1, 0.15)))
+ggsave(p.con2, filename = "Exp3_condition_model.png", scale = 0.5, height = 9, width = 16)
 ```
 
 
@@ -447,11 +455,6 @@ ggplot(data = all.res2, aes(y=lrt.p.con))+
 ```
 
 
-
-
-```{r eval=FALSE, include=FALSE}
-#save.image("power_sim_disjunctive_syll_order_as_factor.RData")
-```
 
 
 
