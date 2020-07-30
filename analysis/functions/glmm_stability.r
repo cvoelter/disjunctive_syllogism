@@ -1,3 +1,4 @@
+#written and kindly provided by Roger Mundry
 glmm.model.stab<-function(model.res, contr=NULL, ind.cases=F, para=F, data=NULL, use=NULL, n.cores=c("all-1", "all"), save.path=NULL, load.lib=T, lib.loc=.libPaths()){
 	print("please carefully evaluate whether the result makes sense, and if not, please contact me")
 	#function determining stability of GLMMs (run using lmer or glmer) by excluding levels of random effects, one at a time;

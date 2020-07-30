@@ -1,3 +1,4 @@
+#written and kindly provided by Roger Mundry
 drop1p<-function(model.res, para=F, data=NULL, contr=NULL, n.cores=c("all-1", "all"), to.del=NULL, return.model.results=F, load.lib=T, lib.loc=.libPaths()){
 	#last changed July 6 2017 (minor fix re number cores used)
 	##determine terms that can be dropped:

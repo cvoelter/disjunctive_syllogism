@@ -1,3 +1,4 @@
+#written and kindly provided by Roger Mundry
 boot.glmm.pred<-function(model.res, excl.warnings=F, nboots=1000, para=F, resol=1000, level=0.95, use=NULL, circ.var.name=NULL, circ.var=NULL, use.u=F, 
 	n.cores=c("all-1", "all"), save.path=NULL, load.lib=T, lib.loc=.libPaths(), set.all.effects.2.zero=F){
 	if(load.lib){library(lme4, lib.loc=lib.loc)}

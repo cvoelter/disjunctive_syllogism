@@ -1,6 +1,6 @@
 #functions providng various diagnostics for evaluating model assumptions and stability and
 #for helping with setting an appropriate random slopes structure for (G)LMMs
-#written by Roger Mundry, last modified early 2016
+#written and kindly provided by Roger Mundry, last modified early 2016
 ranef.diagn.plot<-function(model.res, QQ=F, col=grey(0.5, alpha=0.75)){
   old.par = par(no.readonly = TRUE)
 	if(class(model.res)[[1]]!="glmmTMB"){
