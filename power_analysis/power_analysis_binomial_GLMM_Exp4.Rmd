@@ -1,7 +1,7 @@
 ---
 title: "Exp4 - power analysis - binomial GLMM"
 author: "Christoph Völter"
-date: "31/05/2020"
+date: "02/03/2021"
 output: 
   html_document:
     theme: united
@@ -12,11 +12,12 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls(all.names = TRUE))
 library(tidyverse)
 library(cowplot)
 library("gghalves")
 
-load("power_sim_disjsyll_1000iter_Exp4.RData")
+load("power_sim_disjsyll_1000iter_Exp4_.RData")
 ```
 
 ## Generate data
@@ -29,8 +30,8 @@ n.per.subject <- 12 # observations per subject
 n.per.condition <- 12 # observations per subject and condition
 subj.id <- as.factor(paste("subj", 1:n.subject, sep = "."))
 age_range <- c(12:31) # age range between 8 and 40
-control.per <- 1 / 4 # performance in control condition
-test.per <- c(0.55, 0.65) # performance in test condition
+control.per <- 2 / 3 # performance in control condition
+test.per <- c(0.85, 0.95) # performance in test condition
 
 start.data <- data.frame(subj.id)
 # duplicate rows according to the number obs. per subject:
@@ -48,7 +49,7 @@ start.data$order2 <- ifelse((start.data$order == "test_first" & start.data$condi
   (start.data$order == "control_first" & start.data$condition == "control"), 1, 2)
 
 
-# add demographics  (if it should be generated in each loop)
+# add demographics 
 chimp.demo <- read.csv("data/chimp_demographics.csv")
 start.data$subject_name <- as.factor(rep(x = chimp.demo$Subject, times = n.per.subject))[as.numeric(start.data$subj.id)]
 start.data$age <- as.numeric(rep(x = chimp.demo$Age, times = n.per.subject))[as.numeric(start.data$subj.id)]
@@ -95,7 +96,7 @@ range(apply(X = xx > 0, MARGIN = 1, sum))
 ```{r eval=FALSE, include=FALSE}
 n.simus <- 1000 # small number for testing
 r.effects <- c(0.175, 0.35, 0.7) # random effects to be simulated
-# with the intercept being -0.6931472 (qlogis(1/3)) we could make the following
+# with the intercept being 0.6931472 (qlogis(2/3)) we could make the following
 # guesses for the random intercept:
 #- 0.175: tiny random intercepts effect
 #- 0.35: moderate random intercepts effect
@@ -103,12 +104,8 @@ r.effects <- c(0.175, 0.35, 0.7) # random effects to be simulated
 #- 1.4: very strong random intercepts effect
 
 r.slope.con <- c(0.45, 0.9)
-# with the intercept being -0.8938179 (qlogis(1/3)-qlogis(0.55)) we could make the following
-# guesses for the random slopes:
-#- 0.225: tiny random slopes effect
-#- 0.45: moderate random slopes effect
-#- 0.9: strong random slopes effect
-#- 1.8: very strong random slopes effect
+# same as for exp 3
+
 
 r.slope.trial <- 0.1
 #r.slope.order <- 0.1 #if order is included as within-subject factor.
@@ -175,8 +172,7 @@ for (i in 1:nrow(all.res)) {
   # add random effect to linear predictor:
   LP <- LP + rnorm(n = n.subject, sd = all.res[i, "r.effect"])[as.numeric(xdata$subj.id)] +
     rnorm(n = n.subject, sd = all.res[i, "r.slope.con"])[as.numeric(xdata$subj.id)] * xdata$condition.dummy +
-    rnorm(n = n.subject, sd = all.res[i, "r.slope.trial"])[as.numeric(xdata$subj.id)] * xdata$z.trial #+
-  # rnorm(n = n.subject, sd = all.res[i, "r.slope.order"])[as.numeric(xdata$subj.id)]*xdata$z.order
+    rnorm(n = n.subject, sd = all.res[i, "r.slope.trial"])[as.numeric(xdata$subj.id)] * xdata$z.trial
 
   # generate response:
   xdata$correct <- rbinom(n = nrow(xdata), size = 1, prob = exp(LP) / (1 + exp(LP)))
@@ -200,7 +196,7 @@ for (i in 1:nrow(all.res)) {
 }
 
 
-#save.image("power_sim_disjsyll_1000iter_Exp4.RData")
+save.image("power_sim_disjsyll_1000iter_Exp4_.RData")
 ```
 
 ## Evaluation of results 
@@ -246,51 +242,7 @@ all.res2=subset(all.res, warns.full==0)
 
 ```
 
-### How many models converged and have a significant LRT of condition or a significant full-null model comparison?   
-```{r echo=FALSE}
-lrt.data <- all.res2 %>%
-  group_by(test.per, r.effect, r.slope.con) %>%
-  summarise(lrt.p.con.mean = mean(lrt.p.con), #mean condition p-value of the models that converged
-            n.sign.lrt = length(lrt.p.con[lrt.p.con < 0.05]), #number of significant condition effects
-            n.lrt = n.simus,#length(lrt.p.con), #number of iterations
-            proportion.sign.lrt = length(lrt.p.con[lrt.p.con < 0.05]) / n.simus, #proportion of significant condition effects
-            full.null.p.mean = mean(full.null.p), #mean full-null model p-value of the models that converged
-            n.sign.full.null.p = length(full.null.p[full.null.p < 0.05]), #number of significant full-null model comparisons
-            n.fn = n.simus, #length(full.null.p), #number of iterations 
-            proportion.sign.fn = length(full.null.p[full.null.p < 0.05]) /n.simus) #proportion of significant full-null model comparisons
 
-lrt.data
-```
-
-#### Plotting the proportion of significant Full-null model comparisons
-
-```{r echo=FALSE}
-
-ggplot(data = lrt.data, aes(y=proportion.sign.fn))+
-  geom_point(aes(x=as.factor(r.effect), y=proportion.sign.fn))+
-  geom_boxplot(aes(x=as.factor(r.effect), y=proportion.sign.fn, group=r.effect))+
-  #theme_classic()+
-  ylim(0.3, 1)+
-  geom_hline(yintercept=0.8, colour="red", lty=2)+
-  facet_wrap(~r.slope.con)
-
-```
-
-
-
-#### Plotting the proportion of significant LRTs for the predictor variable condition
-
-```{r echo=FALSE}
-
-ggplot(data = lrt.data, aes(y=proportion.sign.lrt))+
-  geom_point(aes(x=as.factor(r.effect), y=proportion.sign.lrt))+
-  geom_boxplot(aes(x=as.factor(r.effect), y=proportion.sign.lrt, group=r.effect))+
-  #theme_classic()+
-  ylim(0.3, 1)+
-  geom_hline(yintercept=0.8, colour="red", lty=2)+
-  facet_wrap(~r.slope.con)
-
-```
 
 ### How many models converged, have a significant full-null model comparison, and a significant LRT of condition?  
 ```{r echo=FALSE}
@@ -320,6 +272,8 @@ p.exp4.con.power <- ggplot(data = lrt.data2, aes(y=proportion.sign.lrt2))+
       xlab("Size of random effect") +
       theme_bw()
  p.exp4.con.power
+ 
+ ggsave(p.exp4.con.power, filename = "Exp4_condition_model.png", scale = 0.5, height =7, width = 16)
 
 ```
 
@@ -379,8 +333,8 @@ p.exp4.con.est <- ggplot(data = all.res2, aes(x = as.factor(r.effect), y = condi
   geom_boxplot(data = all.res2 %>% filter(r.slope.con == "0.9"), aes(x = as.factor(r.effect), y = conditiontest, group = as.factor(r.effect)), position = position_nudge(x = .2), width = 0.3, alpha = 0.1, outlier.colour = "white") +
   facet_wrap(~test.per) +
   geom_hline(yintercept = 0, colour = "black", alpha = 0.5) +
-  geom_hline(data = data.frame(test.per = "0.65"), aes(yintercept = coefs["conditiontest"]), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
-  geom_hline(data = data.frame(test.per = "0.55"), aes(yintercept = qlogis(0.55) - qlogis(1 / 4)), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
+  geom_hline(data = data.frame(test.per = "0.95"), aes(yintercept = qlogis(0.95) - qlogis(2 / 3)), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
+  geom_hline(data = data.frame(test.per = "0.85"), aes(yintercept = qlogis(0.85) - qlogis(2 / 3)), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
   ylim(-0.3, 3.2)+
   ylab("Condition fixed effect") +
   xlab("Size of random intercept") +
@@ -396,9 +350,13 @@ p.legend <- ggplot(data = all.res2 %>% mutate(r.slope.con = fct_recode(as.factor
 p.leg <- get_legend(p.legend)
 
 p.exp4.con <- plot_grid(p.exp4.con.power, p.exp4.con.est, labels = c("c", "d"), rel_widths = c(1, 1))
-p.exp4.con2 <- ggdraw(plot_grid(p.con,p.exp4.con, p.leg, ncol = 1, nrow = 3, rel_heights = c(1,1, 0.15)))#p.con is created in power_analysis_binomial_GLMM_Exp3.Rmd
-ggsave(p.exp4.con2, filename = "Exp3 and 4_condition_model.png", scale = 0.5, height = 14, width = 16)
+
+p.exp4.con
+
 ```
+
+
+
 
 
 #### Plotting the random intercept  
@@ -425,29 +383,10 @@ ggplot(data = all.res2, aes(x=as.factor(r.effect), y=re.sd))+
   geom_boxplot(aes(x=as.factor(r.effect), y=re.sd, group=r.effect), alpha=0.1, outlier.colour="white")+
   facet_wrap(~r.slope.con)
 ```
-
-
-#### Plotting the full-null model comparison p-values
+#### Combine plots for Exp 3 and 4
 ```{r echo=FALSE}
-ggplot(data = all.res2, aes(y=full.null.p))+
-  geom_jitter(aes(x=as.factor(r.effect), y=full.null.p), alpha=0.5, col="grey")+
-  geom_boxplot(aes(x=as.factor(r.effect), y=full.null.p, group=r.effect), alpha=0.1, outlier.colour="white")+
-  #theme_classic()+
-  scale_y_continuous(trans='log10')+
-  geom_hline(yintercept=0.05, colour="red", lty=2)+
-  facet_wrap(~r.slope.con)
-
-```
-
-#### Plotting the LRT p-values of condition
-```{r echo=FALSE}
-ggplot(data = all.res2, aes(y=lrt.p.con))+
-  geom_jitter(aes(x=as.factor(r.effect), y=lrt.p.con), alpha=0.5, col="grey")+
-  geom_boxplot(aes(x=as.factor(r.effect), y=lrt.p.con, group=r.effect), alpha=0.1, outlier.colour="white")+
-  #theme_classic()+
-  scale_y_continuous(trans='log10')+
-  geom_hline(yintercept=0.05, colour="red", lty=2)+
-  facet_wrap(~r.slope.con)
-
+load("power_sim_disjsyll_1000iter_Exp3.RData")
+p.exp4.con2 <- ggdraw(plot_grid(p.con,p.exp4.con, p.leg, ncol = 1, nrow = 3, rel_heights = c(1,1, 0.15)))#p.con is created in power_analysis_binomial_GLMM_Exp3.Rmd
+ggsave(p.exp4.con2, filename = "Exp3 and 4_condition_model.png", scale = 0.45, height = 14, width = 16)
 ```
 

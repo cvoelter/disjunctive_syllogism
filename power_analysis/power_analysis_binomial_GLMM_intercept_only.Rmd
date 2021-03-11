@@ -12,6 +12,7 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls(all.names = TRUE))
 library(tidyverse)
 library(cowplot)
 
@@ -235,12 +236,10 @@ p.icpt.est <- ggplot(data = all.res2, aes(x = as.factor(r.effect), y = icpt)) +
   xlab("Size of random intercept") +
   theme_bw()
 
-p.int <- plot_grid(p.icpt.prop, p.icpt.est, labels = c("a", "b"))
+p.int.exp1_3 <- plot_grid(p.icpt.prop, p.icpt.est, labels = c("a", "b"))
 
-ggsave(p.int, filename = "intercept_only_model.png", scale = 0.45, height = 7, width = 16)
+ggsave(p.int.exp1_3, filename = "intercept_only_model.png", scale = 0.45, height = 7, width = 16)
 ```
-
-
 
 #### Plotting the random intercept  
 
@@ -250,6 +249,16 @@ ggplot(data = all.res2, aes(x=as.factor(r.effect), y=re.sd))+
   geom_boxplot(aes(x=as.factor(r.effect), y=re.sd, group=r.effect), alpha=0.1, outlier.colour="white")+
   facet_wrap(~test.per)
 
+```
+
+
+#### Combine plot with Exp4 intercept only plot
+```{r}
+load("power_sim_disjsyll_1000iter_intercept_only_Exp4.RData")
+     
+p.int.exp1_4 <- plot_grid(p.int.exp1_3, p.int.exp4, ncol=1)
+
+ggsave(p.int.exp1_4, filename = "intercept_only_models.png", scale = 0.45, height = 14, width = 16)
 ```
 
 

@@ -12,6 +12,7 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls(all.names = TRUE))
 library(tidyverse)
 library(cowplot)
 library("gghalves")
@@ -248,51 +249,6 @@ table(round(all.res2$conditiontest))
 
 ```
 
-### How many models converged and have a significant LRT of condition or a significant full-null model comparison?   
-```{r echo=FALSE}
-lrt.data <- all.res2 %>%
-  group_by(test.per, r.effect, r.slope.con) %>%
-  summarise(lrt.p.con.mean = mean(lrt.p.con), #mean condition p-value of the models that converged
-            n.sign.lrt = length(lrt.p.con[lrt.p.con < 0.05]), #number of significant condition effects
-            n.lrt = n.simus,#length(lrt.p.con), #number of iterations
-            proportion.sign.lrt = length(lrt.p.con[lrt.p.con < 0.05]) / n.simus, #proportion of significant condition effects
-            full.null.p.mean = mean(full.null.p), #mean full-null model p-value of the models that converged
-            n.sign.full.null.p = length(full.null.p[full.null.p < 0.05]), #number of significant full-null model comparisons
-            n.fn = n.simus, #length(full.null.p), #number of iterations 
-            proportion.sign.fn = length(full.null.p[full.null.p < 0.05]) /n.simus) #proportion of significant full-null model comparisons
-
-lrt.data
-```
-
-#### Plotting the proportion of significant Full-null model comparisons
-
-```{r echo=FALSE}
-
-ggplot(data = lrt.data, aes(y=proportion.sign.fn))+
-  geom_point(aes(x=as.factor(r.effect), y=proportion.sign.fn))+
-  geom_boxplot(aes(x=as.factor(r.effect), y=proportion.sign.fn, group=r.effect))+
-  #theme_classic()+
-  ylim(0.3, 1)+
-  geom_hline(yintercept=0.8, colour="red", lty=2)+
-  facet_wrap(~r.slope.con)
-
-```
-
-
-
-#### Plotting the proportion of significant LRTs for the predictor variable condition
-
-```{r echo=FALSE}
-
-ggplot(data = lrt.data, aes(y=proportion.sign.lrt))+
-  geom_point(aes(x=as.factor(r.effect), y=proportion.sign.lrt))+
-  geom_boxplot(aes(x=as.factor(r.effect), y=proportion.sign.lrt, group=r.effect))+
-  #theme_classic()+
-  ylim(0.3, 1)+
-  geom_hline(yintercept=0.8, colour="red", lty=2)+
-  facet_wrap(~r.slope.con)
-
-```
 
 ### How many models converged, have a significant full-null model comparison, and a significant LRT of condition?  
 ```{r echo=FALSE}

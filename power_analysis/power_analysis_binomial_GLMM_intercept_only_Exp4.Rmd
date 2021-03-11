@@ -1,0 +1,256 @@
+---
+title: "Intercept-only models - Exp4 - power analysis"
+author: "Christoph Völter"
+date: "02/03/2021"
+output: 
+  html_document:
+    theme: united
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(cowplot)
+
+load("power_sim_disjsyll_1000iter_intercept_only_Exp4.RData")
+```
+
+## Generate data
+
+```{r echo=FALSE, include=FALSE}
+
+set.seed(1)
+n.subject <- 16 # number subjects
+n.per.subject <- 12 # observations per subject
+n.per.condition <- 12 # observations per subject and condition
+subj.id <- as.factor(paste("subj", 1:n.subject, sep = "."))
+control.per <- 2 / 3 # performance in control condition
+test.per <- c(0.85, 0.95) # performance in test condition
+
+start.data <- data.frame(subj.id)
+# duplicate rows according to the number obs. per subject:
+start.data <- start.data[rep(x = 1:nrow(start.data), times = n.per.subject), ]
+start.data <- as.data.frame(start.data)
+names(start.data) <- "subj.id"
+
+# add condition and trial number
+start.data <- data.frame(expand.grid(subj.id = subj.id, condition = c("control", "test"), trial = c(1:n.per.condition)))
+
+# add order
+start.data$order <- as.factor(rep(x = c("test_first", "control_first"), times = n.subject / 2))[as.numeric(start.data$subj.id)]
+
+start.data$order2 <- ifelse((start.data$order == "test_first" & start.data$condition == "test") |
+  (start.data$order == "control_first" & start.data$condition == "control"), 1, 2)
+
+
+# add demographics  (if it should be generated in each loop)
+chimp.demo <- read.csv("data/chimp_demographics.csv")
+start.data$subject_name <- as.factor(rep(x = chimp.demo$Subject, times = n.per.subject))[as.numeric(start.data$subj.id)]
+start.data$age <- as.numeric(rep(x = chimp.demo$Age, times = n.per.subject))[as.numeric(start.data$subj.id)]
+start.data$sex <- as.factor(rep(x = chimp.demo$Sex, times = n.per.subject))[as.numeric(start.data$subj.id)]
+
+
+# z-transformation of covariates
+start.data$z.age <- as.vector(scale(start.data$age))
+start.data$z.trial <- as.vector(scale(start.data$trial))
+start.data$z.order <- as.vector(scale(as.numeric(start.data$order2)))
+
+# dummy code factors
+start.data$condition.dummy <- as.numeric(start.data$condition == levels(start.data$condition)[2])
+start.data$order.dummy <- as.numeric(start.data$order == levels(start.data$order)[2])
+
+# center condition for random slopes:
+start.data$condition.c <- as.numeric(start.data$condition) - mean(as.numeric(start.data$condition))
+start.data$order.c <- as.numeric(start.data$order) - mean(as.numeric(start.data$order))
+
+# checks:
+# does each subject have only one sex and age?
+xx <- table(start.data$subj.id, start.data$sex)
+range(apply(X = xx > 0, MARGIN = 1, sum)) # should be 1 and 1
+
+xx <- table(start.data$subj.id, start.data$age)
+range(apply(X = xx > 0, MARGIN = 1, sum)) # should be 1 and 1
+
+xx <- table(start.data$subj.id, start.data$condition)
+range(apply(X = xx > 0, MARGIN = 1, sum))
+
+xx <- table(start.data$subj.id, start.data$trial)
+range(apply(X = xx > 0, MARGIN = 1, sum))
+
+xx <- table(start.data$condition, start.data$order)
+range(apply(X = xx > 0, MARGIN = 1, sum))
+
+xx <- table(start.data$subj.id, start.data$order)
+range(apply(X = xx > 0, MARGIN = 1, sum))
+```
+
+
+
+## Simulation
+
+```{r eval=FALSE, include=FALSE}
+n.simus <- 1000 # small number for testing
+r.effects <- c(0.175, 0.35, 0.7) # random effects to be simulated
+# with the intercept being 0.6931472 (qlogis(2/3)) we could make the following
+# guesses for the random intercept:
+#- 0.175: tiny  random intercepts effect
+#- 0.35: moderate random intercepts effect
+#- 0.7: strong random intercepts effect
+#- 1.4: very strong random intercepts effect
+
+r.slope.trial <- 0.1
+
+# create object to store the simulation parameters and results:
+all.res <- data.frame(expand.grid(
+  n.per.subject = n.per.subject, r.effect = r.effects,
+  r.slope.trial = r.slope.trial,
+  test.per = test.per,
+  simu = 1:n.simus
+))
+all.res$icpt <- NA
+all.res$icpt.p <- NA
+all.res$re.sd <- NA
+all.res$warns.full <- NA
+all.res$warns.null <- NA
+
+
+# create data frame with design:
+## done above
+
+# load packages needed:
+library(lme4)
+# Loading required package: Matrix
+library(kyotil) # we want to store info about convergence issues
+
+# define control structure to make convergence more likely:
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000))
+
+xdata <- start.data %>%
+  filter(condition == "test")
+
+m.mat <- model.matrix(object = ~z.trial, data = xdata) # create model martix
+
+# run simulation
+for (i in 1:nrow(all.res)) {
+  set.seed(i) # allows to later replicate individual simulations
+
+  coefs <- c(
+    "(Intercept)" = log(all.res[i, "test.per"] / (1 - all.res[i, "test.per"])),
+    "z.trial" = 0
+  )
+
+  LP <- m.mat[, names(coefs)] %*% coefs # LP wrt fixed effects
+
+  # add random effect to linear predictor:
+  LP <- LP + rnorm(n = n.subject, sd = all.res[i, "r.effect"])[as.numeric(xdata$subj.id)] +
+    rnorm(n = n.subject, sd = all.res[i, "r.slope.trial"])[as.numeric(xdata$subj.id)] * xdata$z.trial
+
+  # generate response:
+  xdata$correct <- rbinom(n = nrow(xdata), size = 1, prob = exp(LP) / (1 + exp(LP)))
+
+  # fit full model:
+  full <- keepWarnings(glmer(correct ~ 1 + (1 + z.trial || subj.id),
+    data = xdata, family = binomial, control = contr
+  ))
+
+  # store results:
+  all.res[i, c("icpt")] <- fixef(full$value)
+  all.res[i, "icpt.p"] <- summary(full$value)$coefficients["(Intercept)", "Pr(>|z|)"]
+  all.res[i, "re.sd"] <- as.data.frame(summary(full$value)$varcor)[1, "sdcor"]
+  all.res[i, "warns.full"] <- nchar(paste(full$warnings, collapse = ""))
+}
+
+
+save.image("power_sim_disjsyll_1000iter_intercept_only_Exp4.RData")
+```
+
+
+
+## Evaluation of results 
+
+* number of warning per combinations of random effects (out of 1000 models per cell)  
+Full model:  
+```{r echo=FALSE}
+#full model
+tapply(X=all.res[, "warns.full"]>0, INDEX=all.res[, c("r.effect")],
+FUN=sum)
+#warning codes: 
+#363: unable to evaluate scaled gradient. Model failed to converge: degenerate  Hessian with 1 negative eigenvalues
+#205: Model is nearly unidentifiable: large eigenvalue ratio - Rescale variables?
+```
+
+
+
+## Only models that converged are evaluated from here on:  
+
+```{r include=FALSE}
+all.res2=subset(all.res, warns.full==0)
+```
+
+### How many models converged and have a significant intercept?  
+```{r echo=FALSE}
+
+icpt.p.data <- all.res2 %>%
+  group_by(test.per, r.effect) %>%
+  summarise(mean.icpt.p = mean(icpt.p), 
+            n.sign.icpt.p = length(icpt.p[icpt.p < 0.05]), 
+            n.icpt.p = n.simus,#length(lrt.p.con), 
+            proportion.sign.icpt.p = length(icpt.p[icpt.p < 0.05]) / n.simus)
+
+icpt.p.data
+```
+
+#### Plotting the proportion of significant LRTs for the predictor variable condition ONLY based on models that converged and with a significant full-null model comparison
+
+```{r echo=FALSE}
+
+p.icpt.prop.exp4 <- ggplot(data = icpt.p.data, aes(y = proportion.sign.icpt.p)) +
+ # geom_point(aes(x = as.factor(r.effect), y = proportion.sign.icpt.p)) +
+  geom_boxplot(aes(x = as.factor(r.effect), y = proportion.sign.icpt.p, group = r.effect)) +
+  ylim(0.0, 1) +
+  geom_hline(yintercept = 0.8, colour = "black", lwd = 1.05, lty = 3) +
+  facet_wrap(~test.per) +
+  ylab("Power") +
+  xlab("Size of random intercept") +
+  theme_bw()
+p.icpt.prop.exp4
+
+```
+
+#### Plotting the intercepts
+
+```{r echo=FALSE}
+
+p.icpt.est.exp4 <- ggplot(data = all.res2, aes(x = as.factor(r.effect), y = icpt)) +
+  geom_jitter(alpha = 0.2, col = "grey") +
+  geom_boxplot(aes(x = as.factor(r.effect), y = icpt, group = r.effect), alpha = 0.1, outlier.colour = "white") +
+  facet_wrap(~test.per) +
+  geom_hline(yintercept = 0, colour = "black", alpha = 0.5) +
+  geom_hline(data = data.frame(test.per = "0.85"), aes(yintercept = qlogis(0.85)), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
+  geom_hline(data = data.frame(test.per = "0.95"), aes(yintercept =coefs["(Intercept)"]), colour = "red", lwd = 1.05, lty = 2, alpha = 0.7) +
+  ylab("Intercept") +
+  xlab("Size of random intercept") +
+  theme_bw()
+
+p.int.exp4 <- plot_grid(p.icpt.prop.exp4, p.icpt.est.exp4, labels = c("c", "d"))
+
+ggsave(p.int.exp4, filename = "intercept_only_model_Exp4.png", scale = 0.45, height = 7, width = 16)
+```
+
+
+
+#### Plotting the random intercept  
+
+```{r echo=FALSE}
+ggplot(data = all.res2, aes(x=as.factor(r.effect), y=re.sd))+
+  geom_jitter( alpha=0.5, col="grey")+
+  geom_boxplot(aes(x=as.factor(r.effect), y=re.sd, group=r.effect), alpha=0.1, outlier.colour="white")+
+  facet_wrap(~test.per)
+
+```
+
+
+
