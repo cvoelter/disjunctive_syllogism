@@ -1,0 +1,325 @@
+---
+title: "disjSyl_analysis_followup_script"
+author: "Lou Haux, Hanna Schleihauf, Christoph Völter"
+date: "8/12/2021"
+output:   html_document:
+    theme: united
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library("dplyr")
+library("ggplot2")
+library("lme4")
+library("effects")
+library("car")
+source("./functions/diagnostic_fcns.r")
+source("./functions/glmm_stability.r")
+source("./functions/boot_glmm.r")
+source("./functions/drop1_para.r")
+source("./functions/paired_data_functions.r")
+```
+
+**Load RData File**
+```{r, include=FALSE}
+load("./disjSyl_analysis_followup.RData")
+```
+
+
+# FOLLOW-UP EXPERIMENT
+
+**Load and clean up data**
+```{r, echo=FALSE}
+# load data
+xdata <- read.csv("./data/disjunctive_syllogism_data_experiment_followup.csv", sep = ';', na = c("NA")) 
+
+# z-tranform covariates and create new variables for them
+xdata$z.age <- as.vector(scale(xdata$age))
+xdata$z.trial <- as.vector(scale(xdata$trial))
+
+# transform character variables into factors
+xdata$subj.id <- as.factor(xdata$subj.id)
+xdata$sex <- as.factor(xdata$sex)
+xdata$condition <- as.factor(xdata$condition) 
+xdata$order <- as.factor(xdata$order) 
+xdata$experience <- as.factor(xdata$experience)
+xdata$other_pair <- as.factor(xdata$other_pair)
+
+# dummy coding of conditon for the random slope part
+xdata$condition.code = as.numeric(xdata$condition==levels(xdata$condition)[2])
+
+str(xdata)
+```
+
+
+The dependent variable for this analysis is chimpanzees’ choice of the other pair
+
+**Comparison of test condition: reveal-empty and control condition: reveal-baited **
+
+*Fitting the full model*
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full <- glmer(other_pair ~ condition + experience + z.age + sex + z.trial + order +
+  (1 + condition.code + z.trial || subj.id),
+data = xdata, family = binomial, control = contr
+)
+## in this model we did not include the correlation of random intercept and random slopes (indicated by ||), because it increases the chance that the model converges. 
+```
+
+*singular fit warnings*
+
+#1 inspect results for random effects
+```{r, echo=FALSE}
+summary(full)$varcor
+```
+
+#2 exclude random slope of z.trials
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full.1 <- glmer(other_pair ~ condition + experience + z.age + sex + z.trial + order +
+  (1 + condition.code || subj.id),
+data = xdata, family = binomial, control = contr
+)
+```
+
+#3 exclude random slope of condition
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full.2 <- glmer(other_pair ~ condition + experience + z.age + sex + z.trial + order +
+  (1 | subj.id),
+data = xdata, family = binomial, control = contr
+)
+```
+
+# 4 check log-likelihood
+```{r, echo=FALSE}
+logLik(full)
+
+logLik(full.1)
+
+logLik(full.2)
+# The log-likelihood reveals identical values
+```
+
+#5 check fixed effects
+```{r, echo=FALSE}
+round(summary(full)$coefficients, 3)
+
+round(summary(full.1)$coefficients, 3)
+
+round(summary(full.2)$coefficients, 3)
+# There do not seem to be substantial differences
+```
+
+*Checking whether assumptions are fulfilled*
+```{r, echo=FALSE}
+# check for colliniarity
+vif(full)
+
+# checking random intercept and slopes
+summary(full)$varcor
+ranef.diagn.plot(full)
+
+# checking model stability
+m.stab.b <- glmm.model.stab(model.res = full, contr = contr, use = c("subj.id"))
+m.stab.b$detailed$warnings
+xx <- as.data.frame(round(m.stab.b$summary[, -1], 3))
+m.stab.plot(round(m.stab.b$summary[, -1], 3))
+```
+
+*Fitting the null model*
+```{r, echo=FALSE}
+# fit null model:
+null <- glmer(other_pair ~ experience + z.age + sex + z.trial + order +
+  (1 + condition.code + z.trial || subj.id),
+data = xdata, family = binomial, control = contr
+)
+```
+
+*Comparing full and null model*
+```{r, echo=FALSE}
+round(anova(full, null, test = "Chisq"), 3)
+```
+
+*Comparing full and reduced models to get the effects of single predictors*
+```{r, echo=FALSE}
+tests <- drop1p(
+  model.res = full, para = F, data = NULL, contr = contr,
+  n.cores = c("all-1"), to.del = NULL
+)
+round(tests$drop1.res, 3)
+## graphical depiction of the effects
+plot(effect("condition", full))
+plot(effect("experience", full))
+plot(effect("z.age", full))
+plot(effect("sex", full))
+plot(effect("z.trial", full))
+plot(effect("order", full))
+```
+*Looking at the estimates of the fixed effects*
+```{r, echo=FALSE}
+round(summary(full)$coefficients, 3)
+```
+
+*Calculating confidence intervals with 1000 bootstraps*
+```{r, echo=FALSE}
+# perform bootstraps for all predictors
+boot.res <- boot.glmm.pred(
+  model.res = full, excl.warnings = T,
+  nboots = 1000, para = T, level = 0.95
+)
+round(boot.res$ci.estimates, 3)
+xx <- as.data.frame(round(boot.res$ci.estimates, 3))
+xx
+m.stab.plot(round(boot.res$ci.estimates, 3))
+
+# perform bootstraps for the main predictor of interest: condition (with the other predictors being at their average), this is necessary to plot the effect of condition
+# dummy code and center all factors but condition
+xdata$order.dummy <- as.numeric(xdata$order == levels(xdata$order)[2])
+xdata$order.c <- xdata$order.dummy - mean(xdata$order.dummy)
+xdata$sex.dummy <- as.numeric(xdata$sex == levels(xdata$sex)[2])
+xdata$sex.c <- xdata$sex.dummy - mean(xdata$sex.dummy)
+xdata$experience.dummy <- as.numeric(xdata$experience == levels(xdata$experience)[2])
+xdata$experience.c <- xdata$experience.dummy - mean(xdata$experience.dummy)
+# fit model with centered predictors
+full.plot <- glmer(other_pair ~ condition + experience.c + z.age + sex.c + z.trial + order.c +
+  (1 + condition + z.trial || subj.id),
+data = xdata, family = binomial, control = contr
+)
+# perform bootstrap
+boot.res.plot <- boot.glmm.pred(
+  model.res = full.plot, excl.warnings = T,
+  nboots = 1000, para = F, level = 0.95,
+  use = c("condition")
+)
+round(boot.res.plot$ci.estimates, 3)
+xx <- as.data.frame(round(boot.res.plot$ci.estimates, 3))
+xx
+m.stab.plot(round(boot.res.plot$ci.estimates, 3))
+
+#estimates for the plot
+boot.res.plot$ci.predicted
+```
+*Plots for the effect of test condition*
+```{r, echo=FALSE, fig1, fig.height = 2, fig.width = 2}
+#Plot for condition effect with model line
+boot.plot = as.data.frame(boot.res.plot$ci.predicted)
+rownames(boot.plot) = c("control", "test") #control = reveal-baited, test = reveal-empty
+boot.plot$condition = rownames(boot.plot)
+boot.plot$condition <- ordered(boot.plot$condition, levels = c("test", "control"))
+xdata$fitted = as.numeric((xdata$other_pair)) - 1
+theme_set( theme_gray()) 
+xdata$condition <- ordered(xdata$condition, levels = c("test", "control"))
+levels(xdata$condition)
+table(xdata$other_pair , xdata$condition)
+g <- ggplot(xdata, aes(x = condition , y = fitted, colour = condition))
+g <- g +  geom_jitter(width = 0.3, height = 0.03, alpha = 0.3)
+g <- g + geom_errorbar(aes(x=c("control"), 
+                             ymin=c(boot.plot$lower.cl[boot.plot$condition == "control"]),
+                             ymax=c(boot.plot$upper.cl[boot.plot$condition == "control"])),
+                         width=.125, colour="#00CDCD",
+                         position=position_dodge(0.9))
+g <- g + geom_errorbar(aes(x=c("test"), 
+                             ymin=c(boot.plot$lower.cl[boot.plot$condition == "test"]),
+                             ymax=c(boot.plot$upper.cl[boot.plot$condition == "test"])),
+                         width=.125, colour="#00CDCD",
+                         position=position_dodge(0.9))
+g <- g + geom_crossbar(data = boot.plot, aes(x=c("control", "test"), 
+                                                 y = fitted, 
+                                                 ymin= fitted,
+                                                 ymax= fitted), 
+                         width=0.5, colour= c("#00CDCD", "#00CDCD"))
+g <- g +  scale_x_discrete(name = NULL, labels = c("reveal empty cup", "reveal baited cup"))
+#g <- g + scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+g <- g +scale_y_continuous(name = "predicted probability of other-pair choices", breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1.0), labels = c("0.0", "0.2", "0.4", "0.6", "0.8", "1.0"))
+g = g + theme(legend.position = "none",
+                axis.text.x = element_text(size = 12, face=NULL, 
+                                           margin = margin(t = 1, r = 0, b = 1, l = 0, 
+                                                           unit = "mm")), 
+                axis.text.y = element_text(size = 12, face=NULL,
+                                           margin = margin(t = 0, r = 1, b = 0, l = 1, 
+                                                           unit = "mm")),
+                axis.title.x = element_text(size = 12, face=NULL,
+                                            margin = margin(t = 1.5, r = 1, b = 0, l = 0, 
+                                                            unit = "mm")),
+                axis.title.y = element_text(size = 12, face=NULL,
+                                            margin = margin(t = 1.5, r = 0, b = 0, l = 0, 
+                                                            unit = "mm")))
+
+g = g + scale_color_manual(values = c("#00CDCD", "#00CDCD"))  #, labels = c(" ", " "))
+
+g
+
+#ggsave(plot = g, filename = 'Follow.up.Experiment.Figure1.pdf', path = "./figures")
+```
+
+
+```{r,echo=FALSE, fig2, fig.height = 2.2, fig.width = 1.9}
+#Plot for within-subject effects
+sum.results = aggregate((as.numeric(xdata$other_pair[xdata$other_pair == "yes"]) - 1), 
+                        by = list(xdata$subj.id[xdata$other_pair == "yes"], 
+                                  xdata$condition[xdata$other_pair == "yes"]), 
+                        FUN = sum)
+colnames(sum.results) <- c("sub.id","condition", "other_pair")
+sum.results$condition <- ordered(sum.results$condition, levels = c("test", "control"))
+sum.results$other_pair <- sum.results$other_pair/16
+
+
+#plot the result:
+#pdf("./figures/Follow.up.Experiment.Figure2.pdf")
+paired.data.plot(vector1=sum.results$other_pair[sum.results$condition == "test"], 
+                      vector2=sum.results$other_pair[sum.results$condition == "control"], xlab="", 
+                      ylab="proportion of other-pair choices", xnames=c("reveal empty cup", "reveal baited cup"), 
+                      size.fac=c(1, NA, -1), ylim=(c(-0.05,1.05)), size.by="circles", edge.width=0.2, n1=NULL, 
+                      n2=NULL, cex.lab=1, col.vec=NULL, lwd=1, bty="o", pch=NULL, lty=NULL, reset.par = TRUE,
+                      add.y.axis=T, up.down.ltys=NULL, cex.axis=1, cex.axis.lab=1, main=NULL, cex.main=1)
+#while (!is.null(dev.list()))  
+#dev.off()
+```
+
+
+*Descriptive statistics*
+```{r, echo=FALSE, count correct cups}
+# For all chimps: control condition
+xdata_control <- xdata %>% filter(condition=="control") %>% count(other_pair)
+xdata_control
+
+# For individual subjects: control condition
+xdataind_control<- xdata %>% group_by(subj.id, other_pair) %>% filter(condition=="control") %>% count(other_pair)
+xdataind_control<- pivot_wider(xdataind_control, names_from= other_pair, values_from= n) 
+xdataind_control<- xdataind_control%>% select(subj.id, yes) %>% mutate(yes=yes/16)
+xdataind_control_plot <- ggplot(data = xdataind_control, aes(y = yes, x = subj.id)) +  geom_boxplot() + ylab("Proportion of other-pair choices \n in the reveal-baited condition") + xlab("")  + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust=1)) + theme(axis.title = element_text(size = 15)) + theme(axis.text = element_text(size = 15))
+xdataind_control_plot
+
+# For all chimps: test condition
+xdata_test <- xdata %>% filter(condition=="test") %>% count(other_pair)
+xdata_test 
+
+# For individual subjects: test condition
+xdataind_test<- xdata %>% group_by(subj.id, other_pair) %>% filter(condition=="test") %>% count(other_pair)
+xdataind_test<- pivot_wider(xdataind_test, names_from= other_pair, values_from= n) 
+xdataind_test<- xdataind_test%>% select(subj.id, yes) %>% mutate(yes=yes/16)
+xdataind_test_plot <- ggplot(data = xdataind_test, aes(y = yes, x = subj.id)) +  geom_boxplot() + ylab("Proportion of other-pair choices \n in the reveal-empty condition") + xlab("")  + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust=1)) + theme(axis.title = element_text(size = 15)) + theme(axis.text = element_text(size = 15))
+xdataind_test_plot
+```
+
+
+```{r, echo=FALSE}
+save.image("./disjSyl_analysis_followup.RData")
+```
+ 
