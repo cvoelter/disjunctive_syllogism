@@ -1,0 +1,1015 @@
+---
+title: " binomial GLMM"
+author: "Lou Haux, Hanna Schleihauf, Christoph Völter"
+date: "30/08/2021"
+output: 
+  html_document:
+    theme: united
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("tidyverse")
+library("dplyr")
+library("ggplot2")
+library("lme4")
+library("effects")
+library("car")
+source("./functions/diagnostic_fcns.r")
+source("./functions/glmm_stability.r")
+source("./functions/boot_glmm.r")
+source("./functions/drop1_para.r")
+source("./functions/paired_data_functions.r")
+```
+
+**Load RData File**
+```{r, include=FALSE}
+(load("./disjSyl_analysis.RData"))
+```
+
+
+# EXPERIMENT 1
+
+**Load and clean up data**
+```{r, echo=FALSE}
+# load data for Experiment 1
+xdata1 <- read.csv("./data/disjunctive_syllogism_data_experiment_1.csv",sep = ';', na = c("NA")) 
+
+# z-tranform covariates and create new variables for them
+xdata1$z.age <- as.vector(scale(xdata1$age))
+xdata1$z.trial <- as.vector(scale(xdata1$trial))
+
+# transform character variables into factors
+xdata1$subj.id <- as.factor(xdata1$subj.id)
+xdata1$sex <- as.factor(xdata1$sex)
+xdata1$correct <- as.factor(xdata1$correct)
+
+str(xdata1)
+```
+
+*Fitting the intercept-only model*
+```{r, echo=FALSE}
+# this control term will be needed in case of convergence issues
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+chance.test_exp1 <- glmer(correct ~ 1 +
+  (1 + z.trial | subj.id),
+data = xdata1, family = binomial, control = contr
+)
+
+summary(chance.test_exp1)
+
+## in this model we did include the correlation of random intercept and random slopes 
+```
+*Singular fit warnings*
+
+#1 without correlation
+
+```{r, echo=FALSE}
+
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+chance.test_exp1_1 <- glmer(correct ~ 1 +
+  (1 + z.trial || subj.id),
+data = xdata1, family = binomial, control = contr
+)
+
+summary(chance.test_exp1_1)
+
+## in this model we did not include the correlation of random intercept and random slopes 
+```
+
+#2 without random slope of trial
+
+```{r, echo=FALSE}
+
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+chance.test_exp1_2 <- glmer(correct ~ 1 +
+  (1 | subj.id),
+data = xdata1, family = binomial, control = contr
+)
+
+summary(chance.test_exp1_2)
+
+```
+
+# 3 check log-likelihood
+```{r, echo=FALSE}
+logLik(chance.test_exp1)
+
+logLik(chance.test_exp1_1)
+
+logLik(chance.test_exp1_2)
+
+# The log-likelihood reveals essentially identical values
+```
+
+#4 check fixed effects
+```{r, echo=FALSE}
+round(summary(chance.test_exp1)$coefficients, 3)
+
+round(summary(chance.test_exp1_1)$coefficients, 3)
+
+round(summary(chance.test_exp1_2)$coefficients, 3)
+
+# There do not seem to be any differences
+```
+
+
+*Descriptive statistics*
+```{r, echo=FALSE, count correct cups}
+# For all chimps
+xdata1 %>% count(correct)
+ggplot(data = xdata1, aes(correct)) +  geom_bar() 
+
+# For individual subjects
+xdata1 %>% group_by(subj.id, correct)  %>% count(correct)
+
+# For individual subjects
+xdata1ind <- xdata1 %>% group_by(subj.id, correct)  %>% count(correct)
+xdata1ind <- pivot_wider(xdata1ind, names_from= correct, values_from= n) 
+xdata1ind <- xdata1ind %>% select(subj.id, yes) %>% mutate(yes=yes/12)
+
+#plot
+xdata1_plot <- ggplot(data = xdata1ind, aes(y = yes, x = subj.id)) +  geom_boxplot() + ylab("Proportion of correct choices") + xlab("") + geom_hline(yintercept=0.5, linetype='dotted', col = 'blue')  + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust=1))  + theme(axis.title = element_text(size = 15)) + theme(axis.text = element_text(size = 15))
+
+xdata1_plot
+```
+
+*perform Binomial test*
+```{r, echo=FALSE}
+# Kidogo is not above chance
+binom.test(8, 12, p = 0.5,
+   alternative = c("two.sided"), conf.level = 0.95)
+
+# Namukisa is not above chance
+binom.test(9, 12, p = 0.5,
+   alternative = c("two.sided"), conf.level = 0.95)
+```
+
+
+
+# EXPERIMENT 2
+
+**Load and clean up data**
+```{r, echo=FALSE}
+# load data for Experiment 2
+xdata2 <- read.csv("./data/disjunctive_syllogism_data_experiment_2.csv",sep = ';', na = c("NA")) 
+
+# z-tranform covariates and create new variables for them
+xdata2$z.age <- as.vector(scale(xdata2$age))
+xdata2$z.trial <- as.vector(scale(xdata2$trial))
+
+# transform character variables into factors
+xdata2$subj.id <- as.factor(xdata2$subj.id)
+xdata2$sex <- as.factor(xdata2$sex)
+xdata2$correct <- as.factor(xdata2$correct)
+
+str(xdata2)
+```
+
+*Fitting the intercept-only model*
+```{r, echo=FALSE}
+# this control term will be needed in case of convergence issues
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+chance.test_exp2 <- glmer(correct ~ 1 +
+  (1 + z.trial | subj.id),
+data = xdata2, family = binomial, control = contr
+)
+
+summary(chance.test_exp2)
+
+
+## in this model we did include the correlation of random intercept and random slopes 
+# This led to singular fit warnings
+```
+
+*Singular fit warnings*
+
+#1 without correlation
+```{r, echo=FALSE}
+
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+chance.test_exp2_1 <- glmer(correct ~ 1 +
+  (1 + z.trial || subj.id),
+data = xdata2, family = binomial, control = contr
+)
+
+summary(chance.test_exp2_1)
+
+## in this model we did include the correlation of random intercept and random slopes 
+# This led to singular fit warnings
+```
+
+#2 without random slope of trial
+```{r, echo=FALSE}
+# this control term will be needed in case of convergence issues
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+chance.test_exp2_2 <- glmer(correct ~ 1 +
+  (1 | subj.id),
+data = xdata2, family = binomial, control = contr
+)
+
+summary(chance.test_exp2_2)
+# This led to singular fit warnings
+```
+
+# 3 check log-likelihood
+```{r, echo=FALSE}
+logLik(chance.test_exp2)
+
+logLik(chance.test_exp2_1)
+
+logLik(chance.test_exp2_2)
+
+# The log-likelihood reveals essentially identical values
+```
+
+#4 check fixed effects
+```{r, echo=FALSE}
+round(summary(chance.test_exp2)$coefficients, 3)
+
+round(summary(chance.test_exp2_1)$coefficients, 3)
+
+round(summary(chance.test_exp2_2)$coefficients, 3)
+# There do not seem to be any differences
+```
+
+
+*Descriptive statistics*
+``````{r, echo=FALSE, count correct cups}
+library(dplyr)
+library(ggplot2)
+
+# For all chimps
+xdata2 %>% count(correct)
+ggplot(data = xdata2, aes(correct)) +  geom_bar() 
+
+# For individual subjects
+xdata2ind <- xdata2 %>% group_by(subj.id, correct)  %>% count(correct)
+xdata2ind <- pivot_wider(xdata2ind, names_from= correct, values_from= n) 
+xdata2ind <- xdata2ind %>% select(subj.id, yes) %>% mutate(yes=yes/12)
+ggplot(data = xdata2ind, aes(y = yes, x = subj.id)) +  geom_boxplot() + ylab("Proportion of correct choices") + xlab("") + geom_hline(yintercept=0.5, linetype='dotted', col = 'blue')  + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust=1))+ theme(axis.title = element_text(size = 15)) + theme(axis.text = element_text(size = 15))
+
+```
+
+
+*perform Binomial test*
+```{r, echo=FALSE}
+# No individual performed significantly above chance
+
+binom.test(9, 12, p = 0.5,
+   alternative = c("two.sided"), conf.level = 0.95)
+```
+
+
+
+
+#EXPERIMENT 3
+
+**Load and clean up data**
+```{r, echo=FALSE}
+# load data for experiment 3 
+xdata3 <- read.csv("./data/disjunctive_syllogism_data_experiment_3.csv", sep = ';', na = c("NA")) 
+
+# z-tranform covariates and create new variables for them
+xdata3$z.age <- as.vector(scale(xdata3$age))
+xdata3$z.trial <- as.vector(scale(xdata3$trial))
+
+# transform character variables into factors
+xdata3$subj.id <- as.factor(xdata3$subj.id)
+xdata3$sex <- as.factor(xdata3$sex)
+xdata3$correct <- as.factor(xdata3$correct)
+
+# only for experiment 3 and 4
+xdata3$condition <- as.factor(xdata3$condition) 
+xdata3$order <- as.factor(xdata3$order) 
+
+# dummy coding of conditon for the random slope part
+xdata3$condition.code = as.numeric(xdata3$condition==levels(xdata3$condition)[2])
+
+str(xdata3)
+```
+
+**For Experiment 3**
+
+The dependent variable for this analysis will be chimpanzees’ choice of the correct cup, i.e. the cup next to the cup which was shown to be empty (Exp. 3).
+
+**Comparison of test condition and control condition**
+*Fitting the full model*
+```{r, echo=FALSE}
+# this control term will be needed in case of convergance issues
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full_exp3 <- glmer(correct ~ condition + z.age + sex + z.trial + order +
+  (1 + condition.code + z.trial | subj.id),
+data = xdata3, family = binomial, control = contr
+)
+
+## in this model we did include the correlation of random intercept and random slopes 
+```
+
+*singular fit warnings*
+
+#1 inspect results for random effects
+```{r, echo=FALSE}
+summary(full_exp3)$varcor
+
+# suggests that correlations are unidentifiable
+```
+
+#2 exclude correlations
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full_exp3_1 <- glmer(correct ~ condition + z.age + sex + z.trial + order +
+  (1 + condition.code + z.trial || subj.id),
+data = xdata3, family = binomial, control = contr
+)
+
+summary(full_exp3_1)$varcor
+
+## in this model we did not include the correlation of random intercept and random slopes 
+```
+
+#3 exclude random slope of z.trials
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full_exp3_2 <- glmer(correct ~ condition + z.age + sex + z.trial + order +
+  (1 + condition.code || subj.id),
+data = xdata3, family = binomial, control = contr)
+
+summary(full_exp3_2)$varcor
+
+## in this model we did not include the correlation of random intercept and random slopes 
+```
+
+#4 exclude random slope of condition
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full_exp3_3 <- glmer(correct ~ condition + z.age + sex + z.trial + order +
+  (1 | subj.id),
+data = xdata3, family = binomial, control = contr)
+
+summary(full_exp3_3)$varcor
+
+```
+
+#5 check log-likelihood
+```{r, echo=FALSE}
+logLik(full_exp3)
+
+logLik(full_exp3_1)
+
+logLik(full_exp3_2)
+
+logLik(full_exp3_3)
+# The log-likelihood reveals essentially identical values
+```
+
+#6 check fixed effects
+```{r, echo=FALSE}
+round(summary(full_exp3)$coefficients, 3)
+
+round(summary(full_exp3_1)$coefficients, 3)
+
+round(summary(full_exp3_2)$coefficients, 3)
+
+round(summary(full_exp3_3)$coefficients, 3)
+# There do not seem to be substantial differences
+```
+
+
+# Are random effects normally distributed?
+```{r, echo=FALSE}
+ranef.diagn.plot(full_exp3)
+```
+
+*Checking whether assumptions are fulfilled*
+```{r, echo=FALSE}
+# check for collinearity
+# vif now works also for GLMMs (without interactions)
+library(car)
+vif(full_exp3)
+
+# checking random intercept and slopes
+summary(full_exp3)$varcor
+ranef.diagn.plot(full_exp3)
+
+# checking model stability
+m.stab.b <- glmm.model.stab(model.res = full_exp3, contr = contr, use = c("subj.id"))
+m.stab.b$detailed$warnings
+xx_exp3 <- as.data.frame(round(m.stab.b$summary[, -1], 3))
+xx_exp3
+m.stab.plot(round(m.stab.b$summary[, -1], 3))
+```
+
+*Fitting the null model*
+```{r, echo=FALSE}
+# fit null model:
+null_exp3 <- glmer(correct ~ z.trial + order + 
+    (1 + condition.code + z.trial | subj.id),
+  data = xdata3, family = binomial, control = contr
+)
+```
+
+*Comparing full and null model*
+```{r, echo=FALSE}
+round(anova(full_exp3, null_exp3, test = "Chisq"), 3)
+```
+
+*Comparing full and reduced models to get the effects of single predictors*
+```{r, echo=FALSE}
+tests <- drop1p(
+  model.res = full_exp3, para = F, data = NULL, contr = contr,
+  n.cores = c("all-1"), to.del = NULL
+)
+round(tests$drop1.res, 3)
+## graphical depiction of the effects
+plot(effect("condition", full_exp3))
+plot(effect("z.age", full_exp3))
+plot(effect("sex", full_exp3))
+plot(effect("z.trial", full_exp3))
+plot(effect("order", full_exp3))
+```
+
+*Looking at the estimates of the fixed effects*
+```{r, echo=FALSE}
+round(summary(full_exp3)$coefficients, 3)
+```
+
+*Calculating confidence intervals with 1000 bootstraps*
+```{r, echo=FALSE}
+# perform bootstraps for all predictors
+boot.res_exp3 <- boot.glmm.pred(
+  model.res = full_exp3, excl.warnings = T,
+  nboots = 1000, para = F, level = 0.95
+)
+round(boot.res_exp3$ci.estimates, 3)
+xx_exp3 <- as.data.frame(round(boot.res_exp3$ci.estimates, 3))
+xx_exp3
+m.stab.plot(round(boot.res_exp3$ci.estimates, 3))
+
+# perform bootstraps for the main predictor of interest: condition (with the other predictors being at their average), this is necessary to plot the effect of condition
+# dummy code and center all factors but condition
+xdata3$order.dummy <- as.numeric(xdata3$order == levels(xdata3$order)[2])
+xdata3$order.c <- xdata3$order.dummy - mean(xdata3$order.dummy)
+xdata3$sex.dummy <- as.numeric(xdata3$sex == levels(xdata3$sex)[2])
+xdata3$sex.c <- xdata3$sex.dummy - mean(xdata3$sex.dummy)
+# fit model with centered predictors
+full_exp3.plot <- glmer(correct ~ condition + z.age + sex.c + z.trial + order.c +
+  (1 + condition + z.trial || subj.id),
+data = xdata3, family = binomial, control = contr
+)
+# perform bootstrap
+boot.res_exp3.plot <- boot.glmm.pred(
+  model.res = full_exp3.plot, excl.warnings = T,
+  nboots = 1000, para = F, level = 0.95,
+  use = c("condition")
+)
+round(boot.res_exp3.plot$ci.estimates, 3)
+xx_exp3 <- as.data.frame(round(boot.res_exp3.plot$ci.estimates, 3))
+xx_exp3
+m.stab.plot(round(boot.res_exp3.plot$ci.estimates, 3))
+
+#estimates for the plot
+boot.res_exp3.plot$ci.predicted
+```
+
+*Plots for the effect of condition*
+```{r}
+
+```
+
+
+*Descriptive statistics*
+``````{r, echo=FALSE, count correct cups}
+# For all chimps: control condition
+xdata3_control <- xdata3 %>% filter(condition=="control") %>% count(correct)
+xdata3_control
+
+# For individual subjects: control condition
+xdata3ind_control<- xdata3 %>% group_by(subj.id, correct) %>% filter(condition=="control") %>% count(correct)
+xdata3ind_control<- pivot_wider(xdata3ind_control, names_from= correct, values_from= n) 
+xdata3ind_control<- xdata3ind_control%>% select(subj.id, yes) %>% mutate(yes=yes/12)
+ggplot(data = xdata3ind_control, aes(y = yes, x = subj.id)) +  geom_boxplot() + ylab("Proportion of correct choices in the control condition") + xlab("") + geom_hline(yintercept=0.33, linetype='dotted', col = 'blue')  + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+tapply(X=xdata3$correct=="yes",INDEX = xdata3$subj.id, FUN = sum)
+aggregate(x=xdata3$correct=="yes",by = xdata3[,c("subj.id","condition")], FUN = sum)
+
+# For all chimps: test condition
+xdata3_test <- xdata3 %>% filter(condition=="test") %>% count(correct)
+xdata3_test 
+
+# For individual subjects: test condition
+xdata3ind_test<- xdata3 %>% group_by(subj.id, correct) %>% filter(condition=="test") %>% count(correct)
+xdata3ind_test<- pivot_wider(xdata3ind_test, names_from= correct, values_from= n) 
+xdata3ind_test<- xdata3ind_test%>% select(subj.id, yes) %>% mutate(yes=yes/12)
+ggplot(data = xdata3ind_test, aes(y = yes, x = subj.id)) +  geom_boxplot() + ylab("Proportion of correct choices \n in the test condition") + xlab("") + geom_hline(yintercept=0.33, linetype='dotted', col = 'blue')  + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust=1)) + theme(axis.title = element_text(size = 15)) + theme(axis.text = element_text(size = 15))
+```
+
+*binomial test for the test condition*
+```{r, echo=FALSE}
+
+# individual level
+
+binom.test(8, 12, p = 0.33,
+           alternative = c("two.sided"),
+           conf.level = 0.95)
+```
+
+
+# Experiment 4
+
+**Load and clean up data**
+```{r, echo=FALSE}
+# load data
+xdata4 <- read.csv("./data/disjunctive_syllogism_data_experiment_4.csv", sep = ';', na = c("NA")) 
+
+# z-tranform covariates and create new variables for them
+xdata4$z.age <- as.vector(scale(xdata4$age))
+xdata4$z.trial <- as.vector(scale(xdata4$trial))
+
+# transform character variables into factors
+xdata4$subj.id <- as.factor(xdata4$subj.id)
+xdata4$sex <- as.factor(xdata4$sex)
+
+
+# only for experiment 3 and 4
+xdata4$condition <- as.factor(xdata4$condition) 
+xdata4$order <- as.factor(xdata4$order) 
+xdata4$other_pair <- as.factor(xdata4$other_pair)
+
+# dummy coding of conditon for the random slope part
+xdata4$condition.code = as.numeric(xdata4$condition==levels(xdata3$condition)[2])
+
+str(xdata4)
+```
+
+**For Experiment 4**
+The dependent variable for this analysis will be chimpanzees’ choice of the other pair, i.e. the cups from which the food was removed (Exp.4).
+
+**Comparison of test condition and control condition for each experiment**
+*Fitting the full model*
+```{r, echo=FALSE}
+# this control term will be needed in case of convergance issues
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full_exp4 <- glmer(other_pair ~ condition + z.age + sex + z.trial + order +
+  (1 + condition.code + z.trial | subj.id),
+data = xdata4, family = binomial, control = contr
+)
+## in this model we did include the correlation of random intercept and random slopes 
+```
+
+*singular fit warnings*
+
+#1 inspect results for random effects
+```{r, echo=FALSE}
+summary(full_exp4)$varcor
+```
+
+#2
+```{r, echo=FALSE}
+# this control term will be needed in case of convergance issues
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full_exp4_1 <- glmer(other_pair ~ condition + z.age + sex + z.trial + order +
+  (1 + condition.code + z.trial || subj.id),
+data = xdata4, family = binomial, control = contr
+)
+
+summary(full_exp4_1)$varcor
+## in this model we did not include the correlation of random intercept and random slopes 
+```
+
+#3 exclude random slope of z.trials
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full_exp4_2 <- glmer(other_pair ~ condition + z.age + sex + z.trial + order +
+  (1 + condition.code || subj.id),
+data = xdata4, family = binomial, control = contr
+)
+
+summary(full_exp4_2)$varcor
+## in this model we did not include the correlation of random intercept and random slopes 
+```
+
+#4 exclude random slope of condition
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:
+full_exp4_3 <- glmer(other_pair ~ condition + z.age + sex + z.trial + order +
+  (1 | subj.id),
+data = xdata4, family = binomial, control = contr
+)
+
+summary(full_exp4_3)$varcor
+## no singular fit warning for full_exp4_2
+```
+
+# 5 check log-likelihood
+```{r, echo=FALSE}
+logLik(full_exp4)
+
+logLik(full_exp4_1)
+
+logLik(full_exp4_2)
+
+logLik(full_exp4_3)
+
+# The log-likelihood reveals essentially identical values
+```
+
+#6 check fixed effects
+```{r, echo=FALSE}
+round(summary(full_exp4)$coefficients, 3)
+
+round(summary(full_exp4_1)$coefficients, 3)
+
+round(summary(full_exp4_2)$coefficients, 3)
+
+round(summary(full_exp4_3)$coefficients, 3)
+# There do not seem to be substantial differences
+```
+
+
+*Checking whether assumptions are fulfilled*
+```{r, echo=FALSE}
+# check for colliniarity
+# vif now works also for GLMMs (without interactions)
+library(car)
+vif(full_exp4)
+
+# checking random intercept and slopes
+summary(full_exp4)$varcor
+ranef.diagn.plot(full_exp4)
+
+# checking model stability
+m.stab.b <- glmm.model.stab(model.res = full_exp4, contr = contr, use = c("subj.id"))
+m.stab.b$detailed$warnings
+xx_exp4 <- as.data.frame(round(m.stab.b$summary[, -1], 3))
+m.stab.plot(round(m.stab.b$summary[, -1], 3))
+```
+
+*Fitting the null model*
+```{r, echo=FALSE}
+# fit null model:
+null_exp4 <- glmer(other_pair ~ z.trial + order + 
+    (1 + condition.code + z.trial | subj.id),
+  data = xdata4, family = binomial, control = contr
+)
+```
+
+*Comparing full and null model*
+```{r, echo=FALSE}
+round(anova(full_exp4, null_exp4, test = "Chisq"), 3)
+```
+
+*Comparing full and reduced models to get the effects of single predictors*
+```{r, echo=FALSE}
+tests <- drop1p(
+  model.res = full_exp4, para = F, data = NULL, contr = contr,
+  n.cores = c("all-1"), to.del = NULL
+)
+round(tests$drop1.res, 3)
+## graphical depiction of the effects
+plot(effect("condition", full_exp4))
+plot(effect("z.age", full_exp4))
+plot(effect("sex", full_exp4))
+plot(effect("z.trial", full_exp4))
+plot(effect("order", full_exp4))
+```
+
+*Looking at the estimates of the fixed effects*
+```{r}
+round(summary(full_exp4)$coefficients, 3)
+```
+
+*Calculating confidence intervals with 1000 bootstraps*
+```{r}
+# perform bootstraps for all predictors
+boot.res_exp4 <- boot.glmm.pred(
+  model.res = full_exp4, excl.warnings = T,
+  nboots = 1000, para = F, level = 0.95
+)
+round(boot.res_exp4$ci.estimates, 3)
+xx_exp4 <- as.data.frame(round(boot.res_exp4$ci.estimates, 3))
+xx_exp4
+m.stab.plot(round(boot.res_exp4$ci.estimates, 3))
+
+# perform bootstraps for the main predictor of interest: condition (with the other predictors being at their average), this is necessary to plot the effect of condition
+# dummy code and center all factors but condition
+xdata4$order.dummy <- as.numeric(xdata4$order == levels(xdata4$order)[2])
+xdata4$order.c <- xdata4$order.dummy - mean(xdata4$order.dummy)
+xdata4$sex.dummy <- as.numeric(xdata4$sex == levels(xdata4$sex)[2])
+xdata4$sex.c <- xdata4$sex.dummy - mean(xdata4$sex.dummy)
+# fit model with centered predictors
+full_exp4.plot <- glmer(other_pair ~ condition + z.age + sex.c + z.trial + order.c +
+  (1 + condition + z.trial || subj.id),
+data = xdata4, family = binomial, control = contr
+)
+# perform bootstrap
+boot.res_exp4.plot <- boot.glmm.pred(
+  model.res = full_exp4.plot, excl.warnings = T,
+  nboots = 1000, para = F, level = 0.95,
+  use = c("condition")
+)
+round(boot.res_exp4.plot$ci.estimates, 3)
+xx_exp4 <- as.data.frame(round(boot.res_exp4.plot$ci.estimates, 3))
+xx_exp4
+m.stab.plot(round(boot.res_exp4.plot$ci.estimates, 3))
+
+#estimates for the plot
+boot.res_exp4.plot$ci.predicted
+```
+
+*Plots for the effect of condition*
+```{r}
+
+```
+
+
+*Descriptive statistics*
+```{r, count correct cups}
+# For all chimps: control condition
+xdata4_control <- xdata4 %>% filter(condition=="control") %>% count(other_pair)
+xdata4_control
+
+# For individual subjects: control condition
+xdata4ind_control<- xdata4 %>% group_by(subj.id, other_pair) %>% filter(condition=="control") %>% count(other_pair)
+xdata4ind_control<- pivot_wider(xdata4ind_control, names_from= other_pair, values_from= n) 
+xdata4ind_control<- xdata4ind_control%>% select(subj.id, yes) %>% mutate(yes=yes/12)
+ggplot(data = xdata4ind_control, aes(y = yes, x = subj.id)) +  geom_boxplot() + ylab("Proportion of other_pair choices in the control condition") + xlab("") + geom_hline(yintercept=0.66, linetype='dotted', col = 'blue')  + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+# For all chimps: test condition
+xdata4_test <- xdata4 %>% filter(condition=="test") %>% count(other_pair)
+xdata4_test 
+
+# For individual subjects: test condition
+xdata4ind_test<- xdata4 %>% group_by(subj.id, other_pair) %>% filter(condition=="test") %>% count(other_pair)
+xdata4ind_test<- pivot_wider(xdata4ind_test, names_from= other_pair, values_from= n) 
+xdata4ind_test<- xdata4ind_test%>% select(subj.id, yes) %>% mutate(yes=yes/12)
+ggplot(data = xdata4ind_test, aes(y = yes, x = subj.id)) +  geom_boxplot() + ylab("Proportion of other-pair choices \n in the test condition") + xlab("") + geom_hline(yintercept=0.66, linetype='dotted', col = 'blue')  + theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust=1)) + theme(axis.title = element_text(size = 15)) + theme(axis.text = element_text(size = 15))
+```
+
+*binomial test for the test condition*
+```{r, echo=FALSE}
+
+# individual level
+binom.test(12, 12, p = 0.66,
+           alternative = c("two.sided"),
+           conf.level = 0.95)
+```
+
+
+# EXPERIMENT 3 and 4
+
+**Secondary analysis for experiment 3 and 4**
+
+**Load and clean up data**
+```{r, echo=FALSE}
+# load data
+xdata3and4 <- read.csv("./data/disjunctive_syllogism_data_experiment_combined_3_4.csv", sep = ';', na = c("NA")) 
+
+
+# select only test conditions of both experiments
+xdata3and4 <- xdata3and4 %>% filter(condition=="test")
+
+# z-tranform covariates and create new variables for them
+xdata3and4$z.age <- as.vector(scale(xdata3and4$age))
+xdata3and4$z.trial <- as.vector(scale(xdata3and4$trial))
+
+# transform character variables into factors
+xdata3and4$subj.id <- as.factor(xdata3and4$subj.id)
+xdata3and4$sex <- as.factor(xdata3and4$sex)
+
+# only for experiment 3 and 4
+xdata3and4$condition <- as.factor(xdata3and4$condition) 
+xdata3and4$order <- as.factor(xdata3and4$order) 
+xdata3and4$other_pair <- as.factor(xdata3and4$other_pair)
+
+# dummy coding of condition for the random slope part
+xdata3and4$condition.code = as.numeric(xdata3and4$condition==levels(xdata3and4$condition)[2])
+
+#only for the secondary analysis (comparison of the test conditions) of experiment 3 and 4 
+xdata3and4$experiment <- as.factor(xdata3and4$experiment)
+
+# dummy coding of experiment for the random slope part
+xdata3and4$experiment.code = as.numeric(xdata3and4$experiment==levels(xdata3and4$experiment)[2])
+
+str(xdata3and4)
+```
+
+
+*Comparison of the test conditions of experiment 3 and 4*
+
+The dependent variable for this analysis will be chimpanzees’ choice of the other pair, i.e. the cups next to the cup which was shown to be empty (Exp. 3) or from which the food was removed (Exp.4).
+The factor order, refers to the of experiments (coded as factor: Exp3-first, Exp4-first).
+
+```{r echo=FALSE}
+# this control term will be needed in case of convergence issues
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:.
+full_exp3_exp4 <- glmer(other_pair ~ experiment + z.age + sex + z.trial + order +
+  (1 + experiment.code + z.trial | subj.id),
+data = xdata3and4, family = binomial, control = contr
+)
+## in this model we did not include the correlation of random intercept and random slopes 
+```
+
+*singular fit warnings*
+
+#1 inspect results for random effects
+```{r, echo=FALSE}
+summary(full_exp3_exp4)$varcor
+```
+
+#2 without correlation
+
+```{r echo=FALSE}
+
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+# fit full model:.
+full_exp3_exp4_1 <- glmer(other_pair ~ experiment + z.age + sex + z.trial + order +
+  (1 + experiment.code + z.trial || subj.id),
+data = xdata3and4, family = binomial, control = contr
+)
+
+summary(full_exp3_exp4_1)$varcor
+## in this model we did not include the correlation of random intercept and random slopes 
+```
+
+#2 exclude random slope of z.trials
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+full_exp3_exp4_2 <- glmer(other_pair ~ experiment + z.age + sex + z.trial + order +
+  (1 + experiment.code || subj.id),
+data = xdata3and4, family = binomial, control = contr
+)
+
+summary(full_exp3_exp4_2)$varcor
+## in this model we did not include the correlation of random intercept and random slopes 
+```
+
+#3 exclude random slope of experiment
+```{r, echo=FALSE}
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+full_exp3_exp4_3 <- glmer(other_pair ~ experiment + z.age + sex + z.trial + order +
+  (1 | subj.id),
+data = xdata3and4, family = binomial, control = contr
+)
+
+summary(full_exp3_exp4_3)$varcor
+```
+
+# 4 check log-likelihood
+```{r, echo=FALSE}
+logLik(full_exp3_exp4)
+
+logLik(full_exp3_exp4_1)
+
+logLik(full_exp3_exp4_2)
+
+logLik(full_exp3_exp4_3)
+
+# The log-likelihood reveals small differences
+```
+
+#5 check fixed effects
+```{r, echo=FALSE}
+round(summary(full_exp3_exp4)$coefficients, 3)
+
+round(summary(full_exp3_exp4_1)$coefficients, 3)
+
+round(summary(full_exp3_exp4_2)$coefficients, 3)
+
+round(summary(full_exp3_exp4_3)$coefficients, 3)
+# There are small differences
+```
+
+
+*Checking whether assumptions are fulfilled*
+```{r, echo=FALSE}
+# check for colliniarity
+# vif now works also for GLMMs (without interactions)
+library(car)
+
+vif(full_exp3_exp4)
+
+# checking random intercept and slopes
+summary(full_exp3_exp4)$varcor
+ranef.diagn.plot(full_exp3_exp4)
+
+# checking model stability
+m.stab.b <- glmm.model.stab(model.res = full_exp3_exp4, contr = contr, use = c("subj.id"))
+m.stab.b$detailed$warnings
+xx_exp3_exp4 <- as.data.frame(round(m.stab.b$summary[, -1], 3))
+m.stab.plot(round(m.stab.b$summary[, -1], 3))
+```
+
+*Fitting the null model*
+```{r, echo=FALSE}
+# fit null model:
+null_exp3_exp4 <- glmer(other_pair ~ z.trial + order + 
+  (1 + experiment.code + z.trial | subj.id),
+  data = xdata3and4, family = binomial, control = contr
+)
+```
+
+*Comparing full and null model*
+```{r, echo=FALSE}
+round(anova(full_exp3_exp4, null_exp3_exp4, test = "Chisq"), 3)
+```
+
+*Comparing full and reduced models to get the effects of single predictors*
+```{r, echo=FALSE}
+tests <- drop1p(
+  model.res = full_exp3_exp4, para = F, data = NULL, contr = contr,
+  n.cores = c("all-1"), to.del = NULL
+)
+round(tests$drop1.res, 3)
+## graphical depiction of the effects
+plot(effect("experiment", full_exp3_exp4))
+plot(effect("z.age", full_exp3_exp4))
+plot(effect("sex", full_exp3_exp4))
+plot(effect("z.trial", full_exp3_exp4))
+plot(effect("order", full_exp3_exp4))
+```
+
+*Looking at the estimates of the fixed effects*
+```{r, echo=FALSE}
+round(summary(full_exp3_exp4)$coefficients, 3)
+```
+
+*Calculating confidence intervals with 1000 bootstraps*
+```{r, echo=FALSE}
+# perform bootstraps for all predictors
+boot.res_exp3_exp4 <- boot.glmm.pred(
+  model.res = full_exp3_exp4, excl.warnings = T,
+  nboots = 1000, para = F, level = 0.95
+)
+round(boot.res_exp3_exp4$ci.estimates, 3)
+xx_exp3_exp4 <- as.data.frame(round(boot.res_exp3_exp4$ci.estimates, 3))
+xx_exp3_exp4
+m.stab.plot(round(boot.res_exp3_exp4$ci.estimates, 3))
+
+# perform bootstraps for the main predictor of interest: experiment (with the other predictors being at their average), this is necessary to plot the effect of experiment
+# dummy code and center all factors but condition
+xdata3and4$order.dummy <- as.numeric(xdata3and4$order == levels(xdata3and4$order)[2])
+xdata3and4$order.c <- xdata3and4$order.dummy - mean(xdata3and4$order.dummy)
+xdata3and4$sex.dummy <- as.numeric(xdata3and4$sex == levels(xdata3and4$sex)[2])
+xdata3and4$sex.c <- xdata3and4$sex.dummy - mean(xdata3and4$sex.dummy)
+# fit model with centered predictors
+full_exp3_exp4.plot <- glmer(other_pair ~ experiment + z.age + sex.c + z.trial + order.c +
+  (1 + experiment + z.trial || subj.id),
+data = xdata3and4, family = binomial, control = contr
+)
+# perform bootstrap
+boot.res_exp3_exp4.plot <- boot.glmm.pred(
+  model.res = full_exp3_exp4.plot, excl.warnings = T,
+  nboots = 1000, para = F, level = 0.95,
+  use = c("experiment")
+)
+round(boot.res_exp3_exp4.plot$ci.estimates, 3)
+xx_exp3_exp4 <- as.data.frame(round(boot.res_exp3_exp4.plot$ci.estimates, 3))
+xx_exp3_exp4
+m.stab.plot(round(boot.res_exp3_exp4.plot$ci.estimates, 3))
+#estimates for the plot
+boot.res_exp3_exp4.plot$ci.predicted
+```
+
+*Plots for the effect of test condition*
+
+```{r}
+
+```
+
+
+```{r, echo=FALSE}
+save.image("./disjSyl_analysis.RData")
+```
+ 
