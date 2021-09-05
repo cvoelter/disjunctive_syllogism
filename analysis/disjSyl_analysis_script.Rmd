@@ -271,7 +271,50 @@ binom.test(9, 12, p = 0.5,
    alternative = c("two.sided"), conf.level = 0.95)
 ```
 
+*Plot of Exp 1 and 2
 
+```{r}
+
+xdata1.agg <- xdata1 %>%
+  mutate(correct2=as.numeric(correct)-1)%>%
+  group_by(subj.id) %>%
+  summarise(mean.resp = mean(correct2)) %>%
+  ungroup()%>%
+  mutate(experiment="exp1")
+
+xdata2.agg <- xdata2 %>%
+  mutate(correct2=as.numeric(correct)-1)%>%
+  group_by(subj.id) %>%
+  summarise(mean.resp = mean(correct2)) %>%
+  ungroup()%>%
+  mutate(experiment="exp2")%>%
+  full_join(xdata1.agg)
+
+xdata2.agg$experiment2 <- jitter(as.numeric(as.factor(xdata2.agg$experiment), amount = .0001))
+
+
+exp12_plot <- ggplot(data = xdata2.agg, aes(x = experiment, y = mean.resp)) +
+  geom_hline(yintercept = 1/2, lty = 2, col = "black", alpha=0.3) +
+  geom_point(data = xdata2.agg %>% filter(experiment == "exp1"), aes(x = experiment2), color = "dodgerblue", size = 1.5, alpha = .5) +
+  geom_point(data = xdata2.agg %>% filter(experiment == "exp2"), aes(x = experiment2), color = "darkorange", size = 1.5, alpha = .5, ) +
+  geom_line(aes(x = experiment2, group = subj.id), color = "gray", lty = 1, alpha = .3) +
+  #geom_half_violin(data = xdata3.agg %>% filter(condition == "exp1), aes(x = condition2, y = mean.resp), position = position_nudge(x = -.5), side = "l", width = .2, fill = "dodgerblue", alpha = .5) +
+  geom_half_boxplot(data = xdata2.agg %>% filter(experiment == "exp1"), aes(x = experiment2, y = mean.resp), position = position_nudge(x = -.7),  width = .2, side = "r",outlier.shape = NA, center = TRUE, errorbar.draw = FALSE, fill = "dodgerblue", alpha = .5) +
+  #geom_half_violin(data = xdata3.agg %>% filter(condition == "exp2), aes(x = condition2, y = mean.resp), position = position_nudge(x = 0.5), side = "r", width = .2, fill = "darkorange", alpha = .5) +
+  geom_half_boxplot(data = xdata2.agg %>% filter(experiment == "exp2"), aes(x = experiment2, y = mean.resp), position = position_nudge(x = 0.5), width = .2, side = "r",outlier.shape = NA, center = TRUE, errorbar.draw = FALSE,  fill = "darkorange", alpha = .5) +
+  
+  
+  # Define additional settings
+  xlab("") +
+  ylab("Proportion of target-cup choices") +
+  scale_x_continuous(breaks = c(0.75, 2.25), labels = c("Experiment 1", "Experiment 2"), limits = c(0,3)) +
+  ylim(0, 1) +
+  theme_classic()
+
+exp12_plot
+
+ggsave(exp12_plot, filename = "figures/Experiment1_Figure1.png", width = 5, height = 5, scale = 0.7)
+```
 
 
 #EXPERIMENT 3
@@ -525,7 +568,7 @@ exp3_plot <- ggplot(data = xdata3.agg, aes(x = condition, y = mean.resp)) +
 
 
   # Define additional settings
-  xlab("Condition") +
+  xlab("") +
   ylab("Proportion of target-cup choices") +
   scale_x_continuous(breaks = c(0.75, 2.25), labels = c("Control", "Test"), limits = c(0,3)) +
   ylim(0, 1) +
@@ -818,7 +861,7 @@ exp4_plot <- ggplot(data = xdata4.agg, aes(x = condition, y = mean.resp)) +
 
 
   # Define additional settings
-  xlab("Condition") +
+  xlab("") +
   ylab("Proportion of other-pair choices") +
   scale_x_continuous(breaks = c(0.75, 2.25), labels = c("Control", "Test"), limits = c(0,3)) +
   ylim(0, 1) +
@@ -1122,7 +1165,7 @@ exp34_plot <- ggplot(data = xdata3and4.agg, aes(x = experiment, y = mean.resp)) 
 
 
   # Define additional settings
-  xlab("Experiment") +
+  xlab("") +
   ylab("Proportion of other-pair choices") +
   scale_x_continuous(breaks = c(0.75, 2.25), labels = c("Reveal empty", "Reveal baited"), limits = c(0,3)) +
   ylim(0, 1) +
@@ -1132,9 +1175,9 @@ exp34_plot
 
 ggsave(exp34_plot, filename = "figures/Experiment3and4_Figure4.png", width = 5, height = 5, scale = 0.7)
 
-exp3_4_plot<-plot_grid(exp3_plot, exp4_plot, exp34_plot, labels = c("A", "B", "C"), nrow=1)
+exp1_4_plot<-plot_grid(exp12_plot, exp3_plot, exp4_plot, exp34_plot, labels = c("A", "B", "C", "D"), nrow=2)
 
-ggsave(exp3_4_plot, filename = "figures/Experiment3and4_Figure5.png", width = 15, height = 5, scale = 0.65)
+ggsave(exp1_4_plot, filename = "figures/Experiment1-4_Figure.png", width = 10, height = 10, scale = 0.65)
 ```
 
 
