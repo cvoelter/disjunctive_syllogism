@@ -16,6 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library("tidyverse")
 library("dplyr")
 library("ggplot2")
+library("gghalves")
 library("lme4")
 library("effects")
 library("car")
@@ -527,8 +528,8 @@ boot.res_exp3.plot <- boot.glmm.pred(
   use = c("condition")
 )
 round(boot.res_exp3.plot$ci.estimates, 3)
-xx_exp3 <- as.data.frame(round(boot.res_exp3.plot$ci.estimates, 3))
-xx_exp3
+xx_exp3_plot <- as.data.frame(round(boot.res_exp3.plot$ci.estimates, 3))
+xx_exp3_plot
 m.stab.plot(round(boot.res_exp3.plot$ci.estimates, 3))
 
 #estimates for the plot
@@ -820,8 +821,8 @@ boot.res_exp4.plot <- boot.glmm.pred(
   use = c("condition")
 )
 round(boot.res_exp4.plot$ci.estimates, 3)
-xx_exp4 <- as.data.frame(round(boot.res_exp4.plot$ci.estimates, 3))
-xx_exp4
+xx_exp4_plot <- as.data.frame(round(boot.res_exp4.plot$ci.estimates, 3))
+xx_exp4_plot
 m.stab.plot(round(boot.res_exp4.plot$ci.estimates, 3))
 
 #estimates for the plot
@@ -1124,8 +1125,8 @@ boot.res_exp3_exp4.plot <- boot.glmm.pred(
   use = c("experiment")
 )
 round(boot.res_exp3_exp4.plot$ci.estimates, 3)
-xx_exp3_exp4 <- as.data.frame(round(boot.res_exp3_exp4.plot$ci.estimates, 3))
-xx_exp3_exp4
+xx_exp3_exp4_plot <- as.data.frame(round(boot.res_exp3_exp4.plot$ci.estimates, 3))
+xx_exp3_exp4_plot
 m.stab.plot(round(boot.res_exp3_exp4.plot$ci.estimates, 3))
 #estimates for the plot
 boot.res_exp3_exp4.plot$ci.predicted

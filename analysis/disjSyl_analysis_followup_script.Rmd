@@ -19,6 +19,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library("tidyverse")
 library("dplyr")
 library("ggplot2")
+library("gghalves")
 library("lme4")
 library("effects")
 library("car")
@@ -230,8 +231,8 @@ boot.res.plot <- boot.glmm.pred(
   use = c("condition")
 )
 round(boot.res.plot$ci.estimates, 3)
-xx <- as.data.frame(round(boot.res.plot$ci.estimates, 3))
-xx
+xx_plot <- as.data.frame(round(boot.res.plot$ci.estimates, 3))
+xx_plot
 m.stab.plot(round(boot.res.plot$ci.estimates, 3))
 
 #estimates for the plot
@@ -367,14 +368,14 @@ round(summary(full_with_exp)$coefficients, 3)
 *Calculating confidence intervals with 1000 bootstraps*
 ```{r, echo=FALSE}
 # perform bootstraps for all predictors
-boot.res <- boot.glmm.pred(
+boot.res.exp <- boot.glmm.pred(
   model.res = full_with_exp, excl.warnings = T,
   nboots = 1000, para = T, level = 0.95
 )
-round(boot.res$ci.estimates, 3)
-xx_with_exp <- as.data.frame(round(boot.res$ci.estimates, 3))
+round(boot.res.exp$ci.estimates, 3)
+xx_with_exp <- as.data.frame(round(boot.res.exp$ci.estimates, 3))
 xx_with_exp
-m.stab.plot(round(boot.res$ci.estimates, 3))
+m.stab.plot(round(boot.res.exp$ci.estimates, 3))
 
 # perform bootstraps for the main predictor of interest: condition (with the other predictors being at their average), this is necessary to plot the effect of condition
 # dummy code and center all factors but condition
@@ -390,18 +391,18 @@ full_with_exp.plot <- glmer(other_pair ~ condition + experience.c + z.age + sex.
 data = xdata, family = binomial, control = contr
 )
 # perform bootstrap
-boot.res.plot <- boot.glmm.pred(
+boot.res.exp.plot <- boot.glmm.pred(
   model.res = full_with_exp.plot, excl.warnings = T,
   nboots = 1000, para = F, level = 0.95,
   use = c("condition")
 )
-round(boot.res.plot$ci.estimates, 3)
-xx_with_exp <- as.data.frame(round(boot.res.plot$ci.estimates, 3))
-xx_with_exp
-m.stab.plot(round(boot.res.plot$ci.estimates, 3))
+round(boot.res.exp.plot$ci.estimates, 3)
+xx_with_exp_plot <- as.data.frame(round(boot.res.exp.plot$ci.estimates, 3))
+xx_with_exp_plot
+m.stab.plot(round(boot.res.exp.plot$ci.estimates, 3))
 
 #estimates for the plot
-boot.res.plot$ci.predicted
+boot.res.exp.plot$ci.predicted
 ```
 
 
