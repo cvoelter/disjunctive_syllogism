@@ -617,6 +617,53 @@ binom.test(8, 12, p = 1/3,
            conf.level = 0.95)
 ```
 
+*Fitting the intercept-only model*
+Test condition
+```{r, echo=FALSE}
+# this control term will be needed in case of convergence issues
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+chance.test_exp3.t <- glmer(correct ~ 1 +
+  (1 + z.trial | subj.id),
+data = xdata3%>%filter(condition == "test"), family = binomial, control = contr
+)
+
+summary(chance.test_exp3.t)$coef
+
+#we subtracted the logit-transformed chance-value from the estimate of the intercept and calculated the corresponding z- and p-value based on this adjusted estimate.
+z=(summary(chance.test_exp3.t)$coef[1,1]-(log((1/3)/(1-(1/3)))))/(summary(chance.test_exp3.t)$coef[1,2])
+round(z, 2)
+
+# corrected chance value
+2*pnorm(-(abs(z)))
+
+#corrected estimate
+summary(chance.test_exp3.t)$coef[1,1]-(log((1/3)/(1-(1/3))))
+
+```
+Control condition
+```{r, echo=FALSE}
+# this control term will be needed in case of convergence issues
+contr <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 10000000))
+
+chance.test_exp3.c <- glmer(correct ~ 1 +
+  (1 + z.trial | subj.id),
+data = xdata3%>%filter(condition == "control"), family = binomial, control = contr
+)
+
+summary(chance.test_exp3.c)$coef
+
+#we subtracted the logit-transformed chance-value from the estimate of the intercept and calculated the corresponding z- and p-value based on this adjusted estimate.
+z.c=(summary(chance.test_exp3.c)$coef[1,1]-(log((1/3)/(1-(1/3)))))/(summary(chance.test_exp3.c)$coef[1,2])
+round(z.c, 2)
+
+# corrected chance value
+2*pnorm(-(abs(z.c)))
+
+#corrected estimate
+summary(chance.test_exp3.c)$coef[1,1]-(log((1/3)/(1-(1/3))))
+
+```
 
 # Experiment 4
 
